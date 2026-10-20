@@ -1,12 +1,22 @@
 #!/usr/bin/env node
-// release: the commands the Release workflow (.github/workflows/release.yml) runs on rc
-// (docs/global-rules-plan.md, section 6). A pushed tag reaches every session at its next start,
-// and that workflow is the only way to make one.
+// release: the commands the release workflows run (docs/release-flow-plan.md, sections 3 and 5;
+// docs/global-rules-plan.md, section 6). A pushed release tag reaches every session at its next
+// start, so only a workflow makes one: Candidate (.github/workflows/candidate.yml) tags a stamped
+// commit <final>-rc.N, Promote (promote.yml) adds <final> on it; Release (release.yml) on rc is
+// the old flow, kept until the first promoted release.
 //
-//   next     the tag for today (vYYYY.MM.DD, or .2, .3 on the same day); refuses a HEAD already
-//            released as the parent of a stamped release commit
-//   stamp T  writes "Global rules: T" into line 1 of AGENTS.md in the working tree
-//   latest   the highest release tag, or nothing
+//   next              the final tag for today (vYYYY.MM.DD, or .2, .3 once that date is
+//                     released); refuses a HEAD already released or a candidate as the parent
+//                     of a stamped commit
+//   rc T              the next candidate tag of the final tag T: T-rc.1, T-rc.2, ...
+//   stamp T           writes "Global rules: T" into line 1 of AGENTS.md in the working tree
+//   latest            the highest release tag, or nothing
+//   check-candidate B refuses unless B is candidate/<12-character sha of HEAD>, HEAD is on
+//                     origin/main and origin has no other candidate/* branch
+//   checks-passed ID  reads a commit's check runs (the API's JSON) on stdin; refuses unless one
+//                     ran, all finished and none failed, leaving out run ID's own jobs
+//   check-promote R   refuses unless R is the highest rc tag of a new version whose commit's
+//                     AGENTS.md line 1 is that version; prints the final tag
 //
 // Tests for this file set RELEASE_DATE.
 "use strict";
@@ -25,6 +35,56 @@ function nextTag(date, tags) {
   let n = 2;
   while (tags.includes(`${base}.${n}`)) n++;
   return `${base}.${n}`;
+}
+
+const CANDIDATE = /^(v\d+(?:\.\d+)*)-rc\.(\d+)$/;
+const FAILED = new Set(["failure", "timed_out", "cancelled", "action_required", "stale", "startup_failure"]);
+
+function candidates(final, tags) {
+  return tags
+    .map((t) => CANDIDATE.exec(t))
+    .filter((m) => m && m[1] === final)
+    .map((m) => Number(m[2]));
+}
+
+function rcTag(final, tags) {
+  if (!final || latestRelease([final]) !== final) throw new Error(`${final || "(none)"} is not a release tag`);
+  return `${final}-rc.${Math.max(0, ...candidates(final, tags)) + 1}`;
+}
+
+function checkCandidate(branch, head, onMain, others) {
+  const m = /^candidate\/([0-9a-f]{12})$/.exec(branch);
+  if (!m) throw new Error(`${branch} is not candidate/<12-character sha>`);
+  if (!head.startsWith(m[1])) throw new Error(`${branch} names ${m[1]}, not HEAD ${head}`);
+  if (!onMain) throw new Error(`${head} is not on origin/main`);
+  if (others.length) throw new Error(`${others.join(", ")} is left over; Kade deletes it first`);
+}
+
+function checksPassed(runs, runId) {
+  const own = `/actions/runs/${runId}/`;
+  const others = runs.filter((c) => !String(c.details_url || "").includes(own));
+  if (!others.length) throw new Error("no check run on this commit besides this run");
+  const bad = others
+    .filter((c) => c.status !== "completed" || FAILED.has(c.conclusion))
+    .map((c) => `${c.name}: ${c.status === "completed" ? c.conclusion : c.status}`);
+  if (bad.length) throw new Error(`checks not passed: ${bad.join("; ")}`);
+}
+
+function checkPromote(rc, tags, stampLine) {
+  const m = CANDIDATE.exec(rc || "");
+  if (!m) throw new Error(`${rc || "(none)"} is not a candidate tag vX-rc.N`);
+  const final = m[1];
+  const highest = Math.max(...candidates(final, tags), Number(m[2]));
+  if (highest > Number(m[2])) throw new Error(`${final}-rc.${highest} is newer than ${rc}`);
+  if (tags.includes(final)) throw new Error(`${final} is already released`);
+  const latest = latestRelease(tags);
+  if (latest && compareVersions(final, latest) <= 0) {
+    throw new Error(`${final} is not above the latest release ${latest}`);
+  }
+  if (stampLine !== `Global rules: ${final}`) {
+    throw new Error(`line 1 of AGENTS.md at ${rc} is '${stampLine}', not 'Global rules: ${final}'`);
+  }
+  return final;
 }
 
 function setStamp(text, tag) {
@@ -57,6 +117,9 @@ function next() {
     if (parent === head && latestRelease([t]) === t) {
       throw new Error(`${head} is already released as ${t}`);
     }
+    if (parent === head && CANDIDATE.test(t)) {
+      throw new Error(`${head} is already a candidate as ${t}`);
+    }
   }
   return nextTag(today(), tags);
 }
@@ -68,18 +131,42 @@ function stamp(tag) {
   fs.writeFileSync("AGENTS.md", setStamp(fs.readFileSync("AGENTS.md", "utf8"), tag));
 }
 
+function checkCandidateHere(branch) {
+  const head = git("rev-parse", "HEAD");
+  let onMain = true;
+  try {
+    git("merge-base", "--is-ancestor", head, "origin/main");
+  } catch {
+    onMain = false;
+  }
+  const others = git("ls-remote", "--heads", "origin", "candidate/*")
+    .split("\n")
+    .filter(Boolean)
+    .map((line) => line.split("refs/heads/")[1])
+    .filter((b) => b !== branch);
+  checkCandidate(branch, head, onMain, others);
+}
+
 if (require.main === module) {
   const [cmd, ...rest] = process.argv.slice(2);
   try {
     process.chdir(git("rev-parse", "--show-toplevel"));
     if (cmd === "next") console.log(next());
+    else if (cmd === "rc") console.log(rcTag(rest[0], releaseTags()));
     else if (cmd === "stamp") stamp(rest[0]);
     else if (cmd === "latest") console.log(latestRelease(releaseTags()) || "");
-    else throw new Error("usage: release.cjs next | stamp <tag> | latest");
+    else if (cmd === "check-candidate") checkCandidateHere(rest[0] || "");
+    else if (cmd === "checks-passed") checksPassed(JSON.parse(fs.readFileSync(0, "utf8")).check_runs || [], rest[0]);
+    else if (cmd === "check-promote") {
+      const line = git("show", `${rest[0]}^{commit}:AGENTS.md`).split("\n")[0];
+      console.log(checkPromote(rest[0], releaseTags(), line));
+    } else {
+      throw new Error("usage: release.cjs next | rc <tag> | stamp <tag> | latest | check-candidate <branch> | checks-passed <run id> | check-promote <rc tag>");
+    }
   } catch (e) {
     console.error(`release: ${e.message}`);
     process.exit(1);
   }
 }
 
-module.exports = { nextTag, setStamp };
+module.exports = { nextTag, setStamp, rcTag, checkCandidate, checksPassed, checkPromote };

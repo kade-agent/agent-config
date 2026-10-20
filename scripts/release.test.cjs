@@ -73,9 +73,10 @@ function rcCheckout() {
 }
 
 // What the workflow's tag job does with the API: a commit with the stamp whose parent is HEAD.
-function tagStampedChild(dev, tag) {
+// A candidate's tag is <stamp>-rc.N.
+function tagStampedChild(dev, tag, stampTag = tag.replace(/-rc\.\d+$/, "")) {
   const head = git(dev, "rev-parse", "HEAD");
-  fs.writeFileSync(path.join(dev, "AGENTS.md"), r.setStamp(fs.readFileSync(path.join(dev, "AGENTS.md"), "utf8"), tag));
+  fs.writeFileSync(path.join(dev, "AGENTS.md"), r.setStamp(fs.readFileSync(path.join(dev, "AGENTS.md"), "utf8"), stampTag));
   git(dev, "add", "AGENTS.md");
   const tree = git(dev, "write-tree");
   const commit = git(dev, "commit-tree", tree, "-p", head, "-m", `Release ${tag}`);
