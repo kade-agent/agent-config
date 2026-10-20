@@ -1,0 +1,98 @@
+# Promote (docs/release-flow-plan.md, sections 3 and 5). Kade runs it from a candidate tag
+# vYYYY.MM.DD-rc.N ("Use workflow from" lists tags), after trying that candidate in one session.
+# It refuses unless the tag is the highest rc of a version that is not released yet and is above
+# the latest release, its commit's AGENTS.md line 1 is that version, and its prerelease exists
+# (scripts/release.cjs check-promote). It then tags the same commit vYYYY.MM.DD and makes the
+# GitHub release, marked latest, with the prerelease's notes: nothing is built again. That tag
+# reaches every session at its next start (global-sync). Only the tag job can write, and it runs
+# none of the repository's code.
+name: Promote
+
+on:
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  check:
+    name: check the candidate
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      final: ${{ steps.check.outputs.final }}
+      commit: ${{ steps.check.outputs.commit }}
+      notes: ${{ steps.check.outputs.notes }}
+    steps:
+      - name: Only a candidate tag is promoted
+        run: |
+          case "$GITHUB_REF" in
+            refs/tags/v*-rc.*) ;;
+            *) echo "::error::Promote runs from a candidate tag vX-rc.N only; this run is on $GITHUB_REF"; exit 1 ;;
+          esac
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: The candidate is the newest of a new version, with its prerelease
+        id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          final=$(node scripts/release.cjs check-promote "$GITHUB_REF_NAME")
+          commit=$(git rev-parse "$GITHUB_REF_NAME^{commit}")
+          if [ "$commit" != "$GITHUB_SHA" ]; then
+            echo "::error::$GITHUB_REF_NAME is at $commit, the run at $GITHUB_SHA"
+            exit 1
+          fi
+          if [ "$(gh release view "$GITHUB_REF_NAME" --repo "$REPO" --json isPrerelease --jq .isPrerelease)" != true ]; then
+            echo "::error::$GITHUB_REF_NAME has no prerelease"
+            exit 1
+          fi
+          {
+            echo "Global rules $final, promoted from $GITHUB_REF_NAME."
+            echo
+            gh release view "$GITHUB_REF_NAME" --repo "$REPO" --json body --jq .body
+          } > "$RUNNER_TEMP/notes.md"
+          cat "$RUNNER_TEMP/notes.md" >> "$GITHUB_STEP_SUMMARY"
+          {
+            echo "final=$final"
+            echo "commit=$commit"
+            echo "notes=$(base64 -w0 "$RUNNER_TEMP/notes.md")"
+          } >> "$GITHUB_OUTPUT"
+
+  tag:
+    name: tag and GitHub release
+    needs: check
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write  # the tag and the release
+    steps:
+      - name: Tag the candidate's commit and make the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          FINAL: ${{ needs.check.outputs.final }}
+          COMMIT: ${{ needs.check.outputs.commit }}
+          NOTES: ${{ needs.check.outputs.notes }}
+        run: |
+          set -euo pipefail
+          object=$(jq -n --arg tag "$FINAL" --arg sha "$COMMIT" \
+                     '{tag: $tag, message: ("Global rules " + $tag), object: $sha, type: "commit"}' \
+                   | gh api "repos/$REPO/git/tags" --input - --jq .sha)
+          gh api "repos/$REPO/git/refs" -f ref="refs/tags/$FINAL" -f sha="$object" > /dev/null
+          base64 -d <<<"$NOTES" > "$RUNNER_TEMP/notes.md"
+          gh release create "$FINAL" --repo "$REPO" --verify-tag --latest --title "$FINAL" \
+            --notes-file "$RUNNER_TEMP/notes.md"
+          echo "Released $FINAL at $COMMIT, promoted from $GITHUB_REF_NAME." >> "$GITHUB_STEP_SUMMARY"

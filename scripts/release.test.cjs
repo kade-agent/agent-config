@@ -60,8 +60,8 @@ function released() {
 
 test("prepare and tag are gone: a release is the Release workflow on rc", () => {
   const { dev } = released();
-  assert.throws(() => release(dev, "prepare", "x"), /usage: release\.cjs next \| stamp <tag> \| latest/);
-  assert.throws(() => release(dev, "tag"), /usage: release\.cjs next \| stamp <tag> \| latest/);
+  assert.throws(() => release(dev, "prepare", "x"), /usage: release\.cjs next \| rc <tag> \| stamp <tag> \|/);
+  assert.throws(() => release(dev, "tag"), /usage: release\.cjs next \| rc <tag> \| stamp <tag> \|/);
 });
 
 // The Release workflow (.github/workflows/release.yml) on rc: next, stamp, latest.
@@ -73,9 +73,10 @@ function rcCheckout() {
 }
 
 // What the workflow's tag job does with the API: a commit with the stamp whose parent is HEAD.
-function tagStampedChild(dev, tag) {
+// A candidate's tag is <stamp>-rc.N.
+function tagStampedChild(dev, tag, stampTag = tag.replace(/-rc\.\d+$/, "")) {
   const head = git(dev, "rev-parse", "HEAD");
-  fs.writeFileSync(path.join(dev, "AGENTS.md"), r.setStamp(fs.readFileSync(path.join(dev, "AGENTS.md"), "utf8"), tag));
+  fs.writeFileSync(path.join(dev, "AGENTS.md"), r.setStamp(fs.readFileSync(path.join(dev, "AGENTS.md"), "utf8"), stampTag));
   git(dev, "add", "AGENTS.md");
   const tree = git(dev, "write-tree");
   const commit = git(dev, "commit-tree", tree, "-p", head, "-m", `Release ${tag}`);
@@ -114,4 +115,101 @@ test("latest prints the highest release tag, ignoring other v tags", () => {
   git(dev, "tag", "v0.0.0-probe");
   git(dev, "tag", "v2026.10.09.2");
   assert.strictEqual(release(dev, "latest").trim(), "v2026.10.09.2");
+});
+
+// The candidate flow (docs/release-flow-plan.md, sections 3 and 5): Candidate tags the stamped
+// commit <final>-rc.N, Promote adds <final> on the same commit.
+
+test("nextTag reuses a date that has only candidates, and rc tags never count as releases", () => {
+  assert.strictEqual(r.nextTag("2026-10-12", ["v2026.10.12-rc.1"]), "v2026.10.12");
+  assert.strictEqual(r.nextTag("2026-10-12", ["v2026.10.12", "v2026.10.12.2-rc.1"]), "v2026.10.12.2");
+  const { latestRelease } = require("../hooks/global-sync.cjs");
+  assert.strictEqual(latestRelease(["v2026.10.09", "v2026.10.12-rc.1"]), "v2026.10.09", "global-sync ignores rc tags");
+});
+
+test("rcTag is the next candidate number of a version", () => {
+  assert.strictEqual(r.rcTag("v2026.10.12", []), "v2026.10.12-rc.1");
+  assert.strictEqual(r.rcTag("v2026.10.12", ["v2026.10.12-rc.1", "v2026.10.12-rc.2", "v2026.10.12.2-rc.5"]), "v2026.10.12-rc.3");
+  assert.throws(() => r.rcTag("v2026.10.12-rc.1", []), /not a release tag/);
+});
+
+test("checkCandidate wants candidate/<12-character sha of HEAD>, on main, and no other candidate", () => {
+  const head = "0123456789abcdef0123456789abcdef01234567";
+  assert.doesNotThrow(() => r.checkCandidate("candidate/0123456789ab", head, true, []));
+  assert.throws(() => r.checkCandidate("candidate/v2026.10.12", head, true, []), /candidate\/<12-character sha>/);
+  assert.throws(() => r.checkCandidate("candidate/fedcba987654", head, true, []), /not HEAD/);
+  assert.throws(() => r.checkCandidate("candidate/0123456789ab", head, false, []), /not on origin\/main/);
+  assert.throws(() => r.checkCandidate("candidate/0123456789ab", head, true, ["candidate/aaaaaaaaaaaa"]), /candidate\/aaaaaaaaaaaa is left over/);
+});
+
+test("checksPassed wants at least one finished check run, none failed, this run's own left out", () => {
+  const run = (name, status, conclusion, id = 1) => ({ name, status, conclusion, details_url: `https://github.com/o/r/actions/runs/${id}/job/9` });
+  assert.doesNotThrow(() => r.checksPassed([run("test", "completed", "success"), run("guard", "completed", "skipped")], "7"));
+  assert.doesNotThrow(() => r.checksPassed([run("test", "completed", "success"), run("stamp and test", "in_progress", null, 7)], "7"));
+  assert.throws(() => r.checksPassed([run("stamp and test", "in_progress", null, 7)], "7"), /no check run/);
+  assert.throws(() => r.checksPassed([run("test", "in_progress", null)], "7"), /test: in_progress/);
+  for (const c of ["failure", "timed_out", "cancelled", "action_required"]) {
+    assert.throws(() => r.checksPassed([run("test", "completed", c)], "7"), new RegExp(`test: ${c}`));
+  }
+});
+
+test("checkPromote wants the highest rc of a new version whose commit carries that version's stamp", () => {
+  const tags = ["v2026.10.09", "v2026.10.12-rc.1", "v2026.10.12-rc.2"];
+  const stamp = "Global rules: v2026.10.12";
+  assert.strictEqual(r.checkPromote("v2026.10.12-rc.2", tags, stamp), "v2026.10.12");
+  assert.throws(() => r.checkPromote("v2026.10.12", tags, stamp), /not a candidate tag/);
+  assert.throws(() => r.checkPromote("v2026.10.12-rc.1", tags, stamp), /v2026\.10\.12-rc\.2 is newer/);
+  assert.throws(() => r.checkPromote("v2026.10.12-rc.2", [...tags, "v2026.10.12"], stamp), /already released/);
+  assert.throws(() => r.checkPromote("v2026.10.12-rc.2", [...tags, "v2026.10.13"], stamp), /not above the latest release v2026\.10\.13/);
+  assert.throws(() => r.checkPromote("v2026.10.12-rc.2", tags, "Global rules: v2026.10.11"), /line 1 of AGENTS\.md/);
+});
+
+test("next refuses a commit that is already a candidate", () => {
+  const dev = rcCheckout();
+  tagStampedChild(dev, "v2026.10.12-rc.1");
+  assert.throws(() => release(dev, "next"), /already a candidate as v2026\.10\.12-rc\.1/);
+});
+
+test("rc and check-promote read the repository's tags and the candidate's AGENTS.md", () => {
+  const dev = rcCheckout();
+  assert.strictEqual(release(dev, "rc", "v2026.10.12").trim(), "v2026.10.12-rc.1");
+  tagStampedChild(dev, "v2026.10.12-rc.1");
+  assert.strictEqual(release(dev, "rc", "v2026.10.12").trim(), "v2026.10.12-rc.2");
+  assert.strictEqual(release(dev, "check-promote", "v2026.10.12-rc.1").trim(), "v2026.10.12");
+});
+
+test("check-candidate reads HEAD, origin/main and the origin's candidate branches", () => {
+  const { dev } = released();
+  const short = git(dev, "rev-parse", "HEAD").slice(0, 12);
+  git(dev, "fetch", "-q", "origin");
+  git(dev, "push", "-q", "origin", `HEAD:refs/heads/candidate/${short}`);
+  assert.doesNotThrow(() => release(dev, "check-candidate", `candidate/${short}`));
+  git(dev, "push", "-q", "origin", "HEAD:refs/heads/candidate/aaaaaaaaaaaa");
+  assert.throws(() => release(dev, "check-candidate", `candidate/${short}`), /left over/);
+  git(dev, "push", "-q", "origin", "--delete", "candidate/aaaaaaaaaaaa");
+  fs.writeFileSync(path.join(dev, "AGENTS.md"), "Global rules: v2026.10.09\n\nNot on main.\n");
+  git(dev, "commit", "-q", "-am", "not on main");
+  const off = git(dev, "rev-parse", "HEAD").slice(0, 12);
+  assert.throws(() => release(dev, "check-candidate", `candidate/${off}`), /not on origin\/main/);
+});
+
+// A candidate that failed leaves its check runs on the main commit; a new candidate branch at the
+// same commit must not be refused for them, nor for a guard run of an earlier push there.
+test("checksPassed leaves out the candidate workflows' own jobs from any run", () => {
+  const run = (name, conclusion, id) => ({ name, status: "completed", conclusion, details_url: `https://github.com/o/r/actions/runs/${id}/job/9` });
+  assert.doesNotThrow(() => r.checksPassed([
+    run("test", "success", 1),
+    run("check, stamp and test", "failure", 2),
+    run("delete the candidate branch", "success", 2),
+    run("candidate branch unchanged", "failure", 3),
+  ], "7"));
+  assert.throws(() => r.checksPassed([run("check, stamp and test", "success", 2)], "7"), /no check run/);
+});
+
+test("the job names checksPassed leaves out are the candidate workflows' jobs", () => {
+  const text = ["candidate.yml", "candidate-guard.yml"]
+    .map((f) => fs.readFileSync(path.join(__dirname, "..", ".github", "workflows", f), "utf8"))
+    .join("\n");
+  const names = [...text.matchAll(/^ {4}name: (.+)$/gm)].map((m) => m[1]);
+  assert.deepStrictEqual([...r.CANDIDATE_JOBS].sort(), names.sort());
 });

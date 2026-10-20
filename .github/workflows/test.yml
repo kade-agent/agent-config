@@ -21,8 +21,9 @@ jobs:
         with:
           node-version: 22
       - run: node --test
-      - name: The release tag equals the stamp in AGENTS.md
+      - name: The release tag, less any -rc.N, equals the stamp in AGENTS.md
         if: startsWith(github.ref, 'refs/tags/v')
         run: |
           stamp=$(head -n 1 AGENTS.md)
-          test "$stamp" = "Global rules: $GITHUB_REF_NAME" || { echo "::error::$stamp, tag $GITHUB_REF_NAME"; exit 1; }
+          final=${GITHUB_REF_NAME%-rc.*}
+          test "$stamp" = "Global rules: $final" || { echo "::error::$stamp, tag $GITHUB_REF_NAME"; exit 1; }

@@ -1,0 +1,178 @@
+# Candidate (docs/release-flow-plan.md, sections 3 to 5). An agent pushes candidate/<12-character
+# sha> at a commit on main, adding no commit; Kade runs this workflow on that branch. It
+#   - refuses unless the branch names HEAD, HEAD is on main, no other candidate branch is left over,
+#     the branch has not moved, and every check run on HEAD passed (scripts/release.cjs),
+#   - picks the final tag vYYYY.MM.DD from the UTC date (.2, .3 once that date is released) and the
+#     next candidate number, writes the final tag into line 1 of AGENTS.md and runs every test on
+#     that tree,
+#   - creates one commit with that stamp whose parent is the main commit, tags it vYYYY.MM.DD-rc.N
+#     and makes a GitHub prerelease. global-sync ignores rc tags, so no session moves to it.
+# Promote (promote.yml), run from the rc tag, adds the final tag on the same commit.
+# Whatever happens, the last job deletes the branch; a failed candidate is fixed on main and
+# starts again with a new branch. Only the tag and cleanup jobs can write, and they run none of
+# the repository's code; the tag job refuses unless the blob and tree it creates are the ones
+# the check job tested.
+name: Candidate
+
+on:
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  check:
+    name: check, stamp and test
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      checks: read  # the check runs on HEAD
+    outputs:
+      final: ${{ steps.stamp.outputs.final }}
+      rc: ${{ steps.stamp.outputs.rc }}
+      blob: ${{ steps.stamp.outputs.blob }}
+      tree: ${{ steps.stamp.outputs.tree }}
+      content: ${{ steps.stamp.outputs.content }}
+      notes: ${{ steps.stamp.outputs.notes }}
+    steps:
+      - name: Only a candidate branch is a candidate
+        run: |
+          case "$GITHUB_REF" in
+            refs/heads/candidate/*) ;;
+            *) echo "::error::a candidate is made from a candidate/* branch only; this run is on $GITHUB_REF"; exit 1 ;;
+          esac
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: The branch names a commit on main, has not moved, and its checks passed
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          node scripts/release.cjs check-candidate "$GITHUB_REF_NAME"
+          head=$(gh api "repos/$REPO/git/ref/heads/$GITHUB_REF_NAME" --jq .object.sha)
+          if [ "$head" != "$GITHUB_SHA" ]; then
+            echo "::error::$GITHUB_REF_NAME moved from $GITHUB_SHA to $head"
+            exit 1
+          fi
+          gh api "repos/$REPO/commits/$GITHUB_SHA/check-runs?per_page=100" \
+            | node scripts/release.cjs checks-passed "$GITHUB_RUN_ID"
+      - name: Stamp AGENTS.md and test that tree
+        id: stamp
+        run: |
+          set -euo pipefail
+          final=$(node scripts/release.cjs next)
+          rc=$(node scripts/release.cjs rc "$final")
+          previous=$(node scripts/release.cjs latest)
+          node scripts/release.cjs stamp "$final"
+          stamp=$(head -n 1 AGENTS.md)
+          if [ "$stamp" != "Global rules: $final" ]; then
+            echo "::error::line 1 of AGENTS.md is '$stamp', not the tag $final"
+            exit 1
+          fi
+          node --test
+          git add AGENTS.md
+          {
+            echo "Global rules $final, candidate $rc, from main at $GITHUB_SHA."
+            echo
+            if [ -n "$previous" ]; then
+              echo "Since $previous:"
+              echo
+              git log --no-merges --format='- %h %s' "$previous..HEAD"
+            fi
+          } > "$RUNNER_TEMP/notes.md"
+          cat "$RUNNER_TEMP/notes.md" >> "$GITHUB_STEP_SUMMARY"
+          {
+            echo "final=$final"
+            echo "rc=$rc"
+            echo "blob=$(git rev-parse :AGENTS.md)"
+            echo "tree=$(git write-tree)"
+            echo "content=$(base64 -w0 AGENTS.md)"
+            echo "notes=$(base64 -w0 "$RUNNER_TEMP/notes.md")"
+          } >> "$GITHUB_OUTPUT"
+
+  tag:
+    name: rc tag and prerelease
+    needs: check
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write  # the stamped commit, the rc tag and the prerelease
+    steps:
+      - name: Create the stamped commit, the rc tag and the prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          FINAL: ${{ needs.check.outputs.final }}
+          RC: ${{ needs.check.outputs.rc }}
+          BLOB: ${{ needs.check.outputs.blob }}
+          TREE: ${{ needs.check.outputs.tree }}
+          CONTENT: ${{ needs.check.outputs.content }}
+          NOTES: ${{ needs.check.outputs.notes }}
+        run: |
+          set -euo pipefail
+          head=$(gh api "repos/$REPO/git/ref/heads/$GITHUB_REF_NAME" --jq .object.sha)
+          if [ "$head" != "$GITHUB_SHA" ]; then
+            echo "::error::$GITHUB_REF_NAME moved from $GITHUB_SHA to $head"
+            exit 1
+          fi
+          blob=$(gh api "repos/$REPO/git/blobs" -f encoding=base64 -f content="$CONTENT" --jq .sha)
+          if [ "$blob" != "$BLOB" ]; then
+            echo "::error::the AGENTS.md blob $blob is not the tested $BLOB"
+            exit 1
+          fi
+          base=$(gh api "repos/$REPO/git/commits/$GITHUB_SHA" --jq .tree.sha)
+          tree=$(jq -n --arg base "$base" --arg sha "$blob" \
+                   '{base_tree: $base, tree: [{path: "AGENTS.md", mode: "100644", type: "blob", sha: $sha}]}' \
+                 | gh api "repos/$REPO/git/trees" --input - --jq .sha)
+          if [ "$tree" != "$TREE" ]; then
+            echo "::error::the tree $tree is not the tested $TREE"
+            exit 1
+          fi
+          commit=$(jq -n --arg msg "Release $FINAL" --arg tree "$tree" --arg parent "$GITHUB_SHA" \
+                     '{message: $msg, tree: $tree, parents: [$parent]}' \
+                   | gh api "repos/$REPO/git/commits" --input - --jq .sha)
+          object=$(jq -n --arg tag "$RC" --arg sha "$commit" \
+                     '{tag: $tag, message: ("Global rules " + $tag), object: $sha, type: "commit"}' \
+                   | gh api "repos/$REPO/git/tags" --input - --jq .sha)
+          gh api "repos/$REPO/git/refs" -f ref="refs/tags/$RC" -f sha="$object" > /dev/null
+          base64 -d <<<"$NOTES" > "$RUNNER_TEMP/notes.md"
+          gh release create "$RC" --repo "$REPO" --verify-tag --prerelease --title "$RC" \
+            --notes-file "$RUNNER_TEMP/notes.md"
+          {
+            echo "Candidate $RC at $commit (parent $GITHUB_SHA on main)."
+            echo "Try it in one session, then Actions > Promote > Run workflow > tag $RC."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  cleanup:
+    name: delete the candidate branch
+    needs: [check, tag]
+    if: always() && startsWith(github.ref, 'refs/heads/candidate/')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write  # deleting the branch
+    steps:
+      - name: Delete the branch, whatever the result
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          if gh api -X DELETE "repos/$REPO/git/refs/heads/$GITHUB_REF_NAME" > /dev/null; then
+            echo "Deleted $GITHUB_REF_NAME." >> "$GITHUB_STEP_SUMMARY"
+          elif [ "$(gh api "repos/$REPO/git/matching-refs/heads/$GITHUB_REF_NAME" \
+                      --jq 'map(select(.ref == "refs/heads/" + env.GITHUB_REF_NAME)) | length')" = 0 ]; then
+            echo "$GITHUB_REF_NAME was already deleted." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "::error::could not delete $GITHUB_REF_NAME; Kade deletes it"
+            exit 1
+          fi
