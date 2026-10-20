@@ -2,8 +2,8 @@
 // release: the commands the release workflows run (docs/release-flow-plan.md, sections 3 and 5;
 // docs/global-rules-plan.md, section 6). A pushed release tag reaches every session at its next
 // start, so only a workflow makes one: Candidate (.github/workflows/candidate.yml) tags a stamped
-// commit <final>-rc.N, Promote (promote.yml) adds <final> on it; Release (release.yml) on rc is
-// the old flow, kept until the first promoted release.
+// commit <final>-rc.N and makes the branch rc/<final>-rc.N; Promote (promote.yml), run on that
+// branch, adds <final> on the same commit.
 //
 //   next              the final tag for today (vYYYY.MM.DD, or .2, .3 once that date is
 //                     released); refuses a HEAD already released or a candidate as the parent
@@ -18,8 +18,8 @@
 //                     candidate workflows' jobs from any run
 //   check-promote R   refuses unless R is the highest rc tag of a new version whose commit's
 //                     AGENTS.md line 1 is that version; prints the final tag
-//   rc-branch B       the rc tag of a branch candidate/<rc tag>, which Candidate makes at the
-//                     tag's commit for Promote to run from (the GitHub app lists no tags)
+//   rc-branch B       the rc tag of a branch rc/<rc tag>, which Candidate makes at the tag's
+//                     commit for Promote to run from (the GitHub app lists no tags)
 //   superseded R      origin's rc branches of R's version below R, space-separated
 //   released T        origin's rc branches of version T and every older one, space-separated
 //
@@ -65,12 +65,11 @@ function rcTag(final, tags) {
   return `${final}-rc.${Math.max(0, ...candidates(final, tags)) + 1}`;
 }
 
-const SHA_BRANCH = /^candidate\/[0-9a-f]{12}$/;
-const RC_BRANCH = /^candidate\/(v\d+(?:\.\d+)*-rc\.\d+)$/;
+const RC_BRANCH = /^rc\/(v\d+(?:\.\d+)*-rc\.\d+)$/;
 
 function rcOfBranch(branch) {
   const m = RC_BRANCH.exec(branch || "");
-  if (!m) throw new Error(`${branch || "(none)"} is not candidate/<rc tag>`);
+  if (!m) throw new Error(`${branch || "(none)"} is not rc/<rc tag>`);
   return m[1];
 }
 
@@ -99,7 +98,6 @@ function checkCandidate(branch, head, onMain, others) {
   if (!m) throw new Error(`${branch} is not candidate/<12-character sha>`);
   if (!head.startsWith(m[1])) throw new Error(`${branch} names ${m[1]}, not HEAD ${head}`);
   if (!onMain) throw new Error(`${head} is not on origin/main`);
-  others = others.filter((b) => SHA_BRANCH.test(b));
   if (others.length) throw new Error(`${others.join(", ")} is left over; Kade deletes it first`);
 }
 
@@ -174,8 +172,8 @@ function stamp(tag) {
   fs.writeFileSync("AGENTS.md", setStamp(fs.readFileSync("AGENTS.md", "utf8"), tag));
 }
 
-function originCandidates() {
-  return git("ls-remote", "--heads", "origin", "candidate/*")
+function originBranches(pattern) {
+  return git("ls-remote", "--heads", "origin", pattern)
     .split("\n")
     .filter(Boolean)
     .map((line) => line.split("refs/heads/")[1]);
@@ -189,7 +187,7 @@ function checkCandidateHere(branch) {
   } catch {
     onMain = false;
   }
-  const others = originCandidates().filter((b) => b !== branch);
+  const others = originBranches("candidate/*").filter((b) => b !== branch);
   checkCandidate(branch, head, onMain, others);
 }
 
@@ -207,10 +205,10 @@ if (require.main === module) {
       const line = git("show", `${rest[0]}^{commit}:AGENTS.md`).split("\n")[0];
       console.log(checkPromote(rest[0], releaseTags(), line));
     } else if (cmd === "rc-branch") console.log(rcOfBranch(rest[0]));
-    else if (cmd === "superseded") console.log(supersededBranches(originCandidates(), rcOfBranch(`candidate/${rest[0]}`)).join(" "));
+    else if (cmd === "superseded") console.log(supersededBranches(originBranches("rc/*"), rcOfBranch(`rc/${rest[0]}`)).join(" "));
     else if (cmd === "released") {
       if (!rest[0] || latestRelease([rest[0]]) !== rest[0]) throw new Error(`${rest[0] || "(none)"} is not a release tag`);
-      console.log(releasedBranches(originCandidates(), rest[0]).join(" "));
+      console.log(releasedBranches(originBranches("rc/*"), rest[0]).join(" "));
     } else {
       throw new Error("usage: release.cjs next | rc <tag> | stamp <tag> | latest | check-candidate <branch> | checks-passed <run id> | check-promote <rc tag> | rc-branch <branch> | superseded <rc tag> | released <tag>");
     }
