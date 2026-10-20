@@ -7,8 +7,8 @@
 #     that tree,
 #   - creates one commit with that stamp whose parent is the main commit, tags it vYYYY.MM.DD-rc.N
 #     and makes a GitHub prerelease. global-sync ignores rc tags, so no session moves to it,
-#   - makes the branch candidate/<rc tag> at that commit, for Promote (promote.yml) to run from
-#     (the GitHub app lists branches only), and deletes the same version's lower rc branches.
+#   - makes the branch rc/<rc tag> at that commit, for Promote (promote.yml) to run from (the
+#     GitHub app lists branches only), and deletes the same version's lower rc branches.
 # Whatever happens, the last job deletes the candidate/<sha> branch; a failed candidate is fixed
 # on main and starts again with a new branch. Only the tag and cleanup jobs can write, and they run none of
 # the repository's code; the tag job refuses unless the blob and tree it creates are the ones
@@ -112,7 +112,7 @@ jobs:
     permissions:
       contents: write  # the stamped commit, the rc tag, the prerelease and the rc branches
     steps:
-      - name: Create the stamped commit, the rc tag, the prerelease and the rc branch
+      - name: Create the stamped commit, the rc tag, the prerelease and the rc/ branch
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
@@ -153,21 +153,19 @@ jobs:
           base64 -d <<<"$NOTES" > "$RUNNER_TEMP/notes.md"
           gh release create "$RC" --repo "$REPO" --verify-tag --prerelease --title "$RC" \
             --notes-file "$RUNNER_TEMP/notes.md"
-          gh api "repos/$REPO/git/refs" -f ref="refs/heads/candidate/$RC" -f sha="$commit" > /dev/null
+          gh api "repos/$REPO/git/refs" -f ref="refs/heads/rc/$RC" -f sha="$commit" > /dev/null
           for b in $SUPERSEDED; do
             gh api -X DELETE "repos/$REPO/git/refs/heads/$b" > /dev/null || echo "::warning::could not delete $b"
           done
           {
             echo "Candidate $RC at $commit (parent $GITHUB_SHA on main)."
             if [ -n "$SUPERSEDED" ]; then echo "Deleted the superseded $SUPERSEDED."; fi
-            echo "Try it in one session, then Actions > Promote > Run workflow > branch candidate/$RC."
+            echo "Try it in one session, then Actions > Promote > Run workflow > branch rc/$RC."
           } >> "$GITHUB_STEP_SUMMARY"
 
   cleanup:
     name: delete the candidate branch
     needs: [check, tag]
-    # Only the branch this run was started on, and only a candidate/<sha> one: a run started on a
-    # candidate/<rc tag> branch by mistake is refused by the check job and keeps that branch.
     if: always() && startsWith(github.ref, 'refs/heads/candidate/')
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -179,9 +177,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
         run: |
-          if ! [[ "$GITHUB_REF_NAME" =~ ^candidate/[0-9a-f]{12}$ ]]; then
-            echo "$GITHUB_REF_NAME is not a candidate/<sha> branch; kept." >> "$GITHUB_STEP_SUMMARY"
-          elif gh api -X DELETE "repos/$REPO/git/refs/heads/$GITHUB_REF_NAME" > /dev/null; then
+          if gh api -X DELETE "repos/$REPO/git/refs/heads/$GITHUB_REF_NAME" > /dev/null; then
             echo "Deleted $GITHUB_REF_NAME." >> "$GITHUB_STEP_SUMMARY"
           elif [ "$(gh api "repos/$REPO/git/matching-refs/heads/$GITHUB_REF_NAME" \
                       --jq 'map(select(.ref == "refs/heads/" + env.GITHUB_REF_NAME)) | length')" = 0 ]; then

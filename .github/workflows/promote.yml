@@ -1,5 +1,5 @@
 # Promote (docs/release-flow-plan.md, sections 3 and 5). Kade runs it on the branch
-# candidate/vYYYY.MM.DD-rc.N that Candidate made (the GitHub app lists branches, not tags), after
+# rc/vYYYY.MM.DD-rc.N that Candidate made (the GitHub app lists branches, not tags), after
 # trying that candidate in one session. The tag is the record and the branch only a handle: it
 # refuses unless the branch head is the rc tag's commit, the tag is the highest rc of a version
 # that is not released yet and is above the latest release, its commit's AGENTS.md line 1 is that
@@ -33,11 +33,11 @@ jobs:
       released: ${{ steps.check.outputs.released }}
       notes: ${{ steps.check.outputs.notes }}
     steps:
-      - name: Only a candidate/<rc tag> branch is promoted
+      - name: Only an rc/<rc tag> branch is promoted
         run: |
           case "$GITHUB_REF" in
-            refs/heads/candidate/v*-rc.*) ;;
-            *) echo "::error::Promote runs on a branch candidate/vX-rc.N only; this run is on $GITHUB_REF"; exit 1 ;;
+            refs/heads/rc/v*-rc.*) ;;
+            *) echo "::error::Promote runs on a branch rc/vX-rc.N only; this run is on $GITHUB_REF"; exit 1 ;;
           esac
       - uses: actions/checkout@v4
         with:
