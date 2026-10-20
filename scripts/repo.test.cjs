@@ -226,3 +226,20 @@ test("AGENTS.md sends every release to the release-flow skill, and the skill exi
   assert.ok(fs.existsSync(path.join(ROOT, "agent-skills", "release-flow", "SKILL.md")),
     "agent-skills/release-flow/SKILL.md exists");
 });
+
+// The candidate flow (docs/release-flow-plan.md, step 4): the agent pushes candidate/<12-character
+// sha> at a commit on main, Kade runs Candidate, then Promote on rc/<rc tag>. The rules name that
+// branch as the one an agent pushes outside claude/<task>; the skill describes the flow and no
+// longer the PR from main into rc.
+test("AGENTS.md lets an agent push candidate/<sha> once, and release-flow describes Candidate and Promote", () => {
+  const rules = fs.readFileSync(path.join(ROOT, "AGENTS.md"), "utf8").replace(/\s+/g, " ");
+  assert.match(rules, /`candidate\/<12-character sha>` at a commit on `main`/, "the Branches rule names the candidate branch");
+  assert.match(rules, /never pushed to again/, "the Branches rule keeps it immutable");
+  const skill = fs.readFileSync(path.join(ROOT, "agent-skills", "release-flow", "SKILL.md"), "utf8").replace(/\s+/g, " ");
+  for (const needle of ["candidate/<12-character sha>", "rc/<rc tag>", "Actions > Candidate", "Actions > Promote", "candidate-guard.yml"]) {
+    assert.ok(skill.includes(needle), `the skill names ${needle}`);
+  }
+  for (const gone of ["--base rc", "PR from main into rc", "pull request from main into rc", "Release on rc"]) {
+    assert.ok(!skill.includes(gone), `the skill no longer says ${gone}`);
+  }
+});
