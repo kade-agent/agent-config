@@ -1,4 +1,4 @@
-# Plan: releases from an immutable candidate branch, promoted by tag
+# Plan: releases from an immutable candidate branch, tagged -rc.N, then promoted
 
 - **Scope:** how every release is made in Kade's repositories (the `release-flow` skill), and
   agent-config's own Release workflow as the first repository moved onto it.
@@ -22,6 +22,12 @@
   7. **Signed update feeds stay**, built once (section 5a).
   8. Candidate's "CI passed" check needs no check name per repository: every check run on the
      commit has finished, none failed, at least one ran (section 3).
+  9. **Promote runs on a branch `candidate/<rc tag>`**, not on the tag: the GitHub mobile app
+     lists branches only. Candidate makes that branch at the rc tag's commit; the tag stays the
+     record, the branch is a handle that Promote checks against it. Candidate deletes the
+     version's lower rc branches; Promote deletes the released version's and every older one's.
+     The branch an agent pushes is `candidate/<12-character sha>` in every repository, so the
+     two kinds never meet. (Kade, after the first Candidate run of step 3.)
 
 ## 1. The problem
 
@@ -61,45 +67,55 @@ C: a `release/vX.Y` branch is cut from that version's tag then, under its own pl
 
 ```
 main --(1) version PR--> main
-     --(2) agent: candidate/v<version> at that main commit
-     --(3) Kade: Actions > Candidate on that branch --> tag v<version>-rc.N + prerelease; branch deleted
-     --(4) Kade tries the prerelease, then Actions > Promote on tag v<version>-rc.N --> tag v<version> + release
+     --(2) agent: candidate/<12-character sha> at that main commit
+     --(3) Kade: Actions > Candidate on that branch --> tag v<version>-rc.N + prerelease
+                 + branch candidate/v<version>-rc.N; the sha branch deleted
+     --(4) Kade tries the prerelease, then Actions > Promote on branch candidate/v<version>-rc.N
+                 --> tag v<version> + release; the rc branches of that version and older deleted
 ```
 
 1. **Version PR into `main`**, as today. The version is Kade's. agent-config skips this step:
    its version is computed (`vYYYY.MM.DD`, `.2` later the same day).
 2. **The candidate branch.** After step 1 has merged, the agent fetches `main`, checks that
    `main`'s CI is green on the merge commit, and pushes a branch at that commit, adding no commit
-   of its own: `git push origin <sha>:refs/heads/candidate/v<version>`. agent-config names it
-   `candidate/<12-character sha>`. It tells Kade: "Actions > Candidate > Run workflow > branch
-   `candidate/v<version>`".
+   of its own: `git push origin <sha>:refs/heads/candidate/<12-character sha>`. It waits for the
+   guard's run on that push to pass, then tells Kade: "Actions > Candidate > Run workflow >
+   branch `candidate/<12-character sha>`".
 3. **Candidate** (`candidate.yml`, `workflow_dispatch`). It refuses unless:
-   - it runs on `refs/heads/candidate/*`, and the name matches the version at that commit (or,
-     in agent-config, the commit's own sha);
+   - it runs on `refs/heads/candidate/<12-character sha>`, and the sha is the commit's;
    - the commit is on `origin/main`, and its checks passed: at least one check run, every
      check run finished, none `failure`, `timed_out`, `cancelled` or `action_required`
-     (Candidate's own runs left out), so no repository names its checks;
-   - no other `candidate/*` branch exists (a left-over one is reported, not reused);
+     (the jobs of Candidate and the guard left out, from any run), so no repository names its
+     checks;
+   - no other `candidate/<sha>` branch exists (a left-over one is reported, not reused);
    - the version is above every final `v*` tag and has no final tag yet;
    - the branch head still equals `GITHUB_SHA`, read through the API at the start and again just
      before the tag is created.
 
    It then builds and tests once, creates the annotated tag `v<version>-rc.N` (N is one more
    than that version's highest rc tag) and a GitHub prerelease with the assets and a
-   `SHA256SUMS` file. A last job, `if: always()`, deletes the branch: after a candidate, a
-   failure, or a cancel. A failed candidate is never re-run; it is fixed on `main` and starts
-   again at step 2 (the next N).
-4. **Promote** (`promote.yml`, `workflow_dispatch`). Kade runs it with the rc tag chosen under
-   "Use workflow from" (the dropdown lists tags), so the workflow is read from the candidate's
-   commit. It refuses unless the ref is a `v<version>-rc.N` tag, that is the version's highest
-   rc tag, its prerelease exists and its assets match `SHA256SUMS`, and the version is still new.
-   It creates the annotated tag `v<version>` on the same commit and the release with the same
-   assets, downloaded from the prerelease, never rebuilt, and marks it latest. The prerelease
-   stays as the record.
+   `SHA256SUMS` file, then the branch `candidate/v<version>-rc.N` at the tag's commit, and
+   deletes that version's lower rc branches (only the highest rc can be promoted). A last job,
+   `if: always()`, deletes the `candidate/<sha>` branch: after a candidate, a failure, or a
+   cancel. A failed candidate is never re-run; it is fixed on `main` and starts again at step 2
+   (a candidate refused only because `main`'s CI had not finished may be pushed again at the
+   same commit).
+4. **Promote** (`promote.yml`, `workflow_dispatch`). Kade runs it on the branch
+   `candidate/v<version>-rc.N`, so the workflow is read from the candidate's commit. The tag is
+   the record and the branch a handle: Promote refuses unless the branch head is the rc tag's
+   commit (read again before tagging), that tag is the version's highest rc tag, its prerelease
+   exists and its assets match `SHA256SUMS`, and the version is still new. It creates the
+   annotated tag `v<version>` on the same commit and the release with the same assets,
+   downloaded from the prerelease, never rebuilt, and marks it latest. Then it deletes the rc
+   branches of that version and every older one, so a candidate never promoted does not linger;
+   a failed Promote deletes none and can run again. The prerelease and its tag stay as the
+   record.
 
 **Who does what:** the agent does steps 1 and 2 and reads the runs; Kade starts steps 3 and 4.
-An agent never creates a tag or release, never starts a workflow, never pushes to or recreates
-an existing `candidate/*` branch, and never points one at a commit that is not on `main`.
+An agent never creates a tag or release, never starts a workflow, never pushes a
+`candidate/<rc tag>` branch, never pushes to an existing `candidate/*` branch, and never points
+one at a commit that is not on `main`. A cloud session cannot delete a branch (its git proxy
+refuses), so a branch it left behind by mistake is Kade's to delete.
 
 ## 4. Keeping the branch immutable
 
@@ -110,7 +126,12 @@ No rulesets (decision 6). Two workflows keep the branch as it was created:
   is on `origin/main`; otherwise the guard deletes the branch and fails. A push that updates it
   (`created` false, `deleted` false), forced or not, makes the guard delete the branch and
   fail, naming the commit it pointed at; the candidate starts again at step 2. A deletion is
-  ignored. Candidate's own deletion uses `GITHUB_TOKEN`, which starts no workflow.
+  ignored. A `candidate/<rc tag>` branch is made only by Candidate, so a push that creates or
+  updates one is deleted too. The workflows create and delete branches with `GITHUB_TOKEN`,
+  which starts no workflow.
+- **The guard runs only for commits that contain it**: a push runs the pushed commit's own
+  workflow files. Every candidate is a `main` commit after #97, so it always has one; a branch
+  at an older commit is not guarded (step 3 found this with a test branch at `7b11dcf`).
 - **Candidate itself** reads the branch head through the API at the start and just before the
   tag, so a push the guard has not handled yet still fails the run, which then deletes the
   branch.
@@ -169,12 +190,16 @@ the bytes users get.
 2. **agent-config's workflows, test-first:** `release.cjs` (rc numbering, the date skip, the
    checks Candidate and Promote share), `candidate.yml`, `promote.yml`, `candidate-guard.yml`,
    the `test.yml` stamp check. `release.yml` stays on `rc` as the fallback until step 3 has passed.
-3. **First run:** the agent pushes a candidate branch, then a test push to a second, throwaway
-   `candidate/*` branch to see the guard delete it; Kade runs Candidate, tries the rc tag in
-   one session, runs Promote. Then he deletes
-   `rc` and its ruleset, and a PR removes `release.yml`.
+3. **First run** (2026-10-20). Done so far: the guard passed `candidate/47b24fae8e1a` and
+   deleted it after a second push; Candidate made `v2026.10.20-rc.1` (commit `0971b99`, parent
+   `47b24fa`, only line 1 of `AGENTS.md` changed) and deleted the branch; a second Candidate on
+   the same commit failed with "already a candidate" and deleted the branch too. Promote could
+   not be started from the GitHub app, which lists no tags: decision 9, built in its own PR.
+   Left: Promote, from the browser for rc.1 (its commit holds the tag-based `promote.yml`) or
+   on the branch of the next candidate. Then Kade deletes `rc` and its ruleset, and a PR
+   removes `release.yml`.
 4. **The global rules and the skill** (a draft PR, released through the new flow): the Branches
-   bullet of `AGENTS.md` names `candidate/v<version>` as the one branch an agent creates outside
+   bullet of `AGENTS.md` names `candidate/<12-character sha>` as the one branch an agent creates outside
    `claude/<task>`, immutable once created; `agent-skills/release-flow/SKILL.md` describes
    section 3 and its "Never" list; `scripts/repo.test.cjs` checks both.
 5. **README and `docs/global-rules-plan.md` section 6** point here.
@@ -189,7 +214,8 @@ the bytes users get.
 
 None left; Kade answered all four on 2026-10-20:
 
-1. A cloud session may push `candidate/*` (decision 5); seen working in step 3.
+1. A cloud session may push `candidate/*` (decision 5); seen working in step 3. It cannot
+   delete one.
 2. No rulesets for `stella-rain/app` or anywhere new: the guard workflow (decision 6, section 4).
 3. Signed update feeds, built once: section 5a (decision 7).
 4. No required check name: Candidate reads every check run on the commit (decision 8).
