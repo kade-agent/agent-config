@@ -7,7 +7,7 @@ the skills moved in from `kade-agent/claude-skills` with their history (step 4).
 
 | Path | What | How it is used |
 |---|---|---|
-| `AGENTS.md` | The global rules, deployed as `~/.claude/AGENTS.md`; line 1 is the release | Released by the Release workflow |
+| `AGENTS.md` | The global rules, deployed as `~/.claude/AGENTS.md`; line 1 is the release | Released by the Candidate and Promote workflows |
 | `CLAUDE.md` | The one line `@AGENTS.md`: Claude Code loads `~/.claude/CLAUDE.md` in every session, and it imports the rules | Deployed with them |
 | `hooks/context-guard.cjs` | Shows the context number at 300k tokens, recommends (never forces) a handoff at 400k (never later than 40% / 60% of the window), and after a compaction | User-level `UserPromptSubmit` and `SessionStart` (compact) hooks, registered from `settings.global.json`; repositories no longer vendor a copy |
 | `hooks/global-sync.cjs` | Keeps `~/.claude` on the latest release tag; prints the new rules into the session that moved; then runs `agent-sync` | User-level `SessionStart` hook, registered from `settings.global.json` |
@@ -17,10 +17,9 @@ the skills moved in from `kade-agent/claude-skills` with their history (step 4).
 | `deploy-exclude` | The allowlist for `~/.claude`: nothing else there can be tracked | Copied to `~/.claude/.git/info/exclude` |
 | `setup/cloud-setup.sh` | Checks this repository out into `~/.claude` in a cloud session | Pasted into the cloud environment's setup script |
 | `setup/local-setup.ps1`, `setup/local-setup.sh` | The same on a Windows PC (PowerShell, not Git Bash) and on macOS or Linux, once per machine | Run by Kade; they stop before overwriting anything |
-| `.github/workflows/release.yml` | Release: on `rc`, tags `vYYYY.MM.DD` (`.2` later the same day) on a commit that stamps line 1 of `AGENTS.md`, with a GitHub release | Started by Kade (Actions → Release → Run on `rc`) after a PR from `main` into `rc` |
-| `.github/workflows/candidate.yml` | Candidate: on `candidate/<12-character sha>` at a commit on `main`, tags `vYYYY.MM.DD-rc.N` on a commit that stamps line 1 of `AGENTS.md`, with a prerelease; deletes the branch whatever happens (`docs/release-flow-plan.md`) | Started by Kade (Actions → Candidate → Run on the branch) after an agent pushes it |
-| `.github/workflows/promote.yml` | Promote: from a `-rc.N` tag, tags the same commit `vYYYY.MM.DD` and makes the release, nothing rebuilt | Started by Kade (Actions → Promote → Run on the rc tag) after trying the candidate |
-| `.github/workflows/candidate-guard.yml` | Deletes a `candidate/*` branch pushed a second time or not at a commit on `main` | Runs on every push to `candidate/*` |
+| `.github/workflows/candidate.yml` | Candidate: on `candidate/<12-character sha>` at a commit on `main`, tags `vYYYY.MM.DD-rc.N` on a commit that stamps line 1 of `AGENTS.md`, with a prerelease and a branch `rc/<rc tag>`; deletes the sha branch whatever happens (`docs/release-flow-plan.md`) | Started by Kade (Actions → Candidate → Run on the branch) after an agent pushes it |
+| `.github/workflows/promote.yml` | Promote: on `rc/<rc tag>`, tags that tag's commit `vYYYY.MM.DD` and makes the release, nothing rebuilt; deletes the released rc branches | Started by Kade (Actions → Promote → Run on the `rc/<rc tag>` branch) after trying the candidate |
+| `.github/workflows/candidate-guard.yml` | Deletes a `candidate/*` branch pushed a second time, not at a commit on `main`, or any pushed `rc/*` branch | Runs on every push to `candidate/*` and `rc/*` |
 | `.github/workflows/project-sync.yml` | Adds issues to the Project "Kade Agent" and applies their `cmd:` labels, through the bridge in `kade-agent/.github` | Runs on issue events |
 | `.claude/CLAUDE.md` | This repository's own notes: where its state is, its gates | Read by sessions opened here; never deployed |
 | `agent-skills/repo-workflow/` | The procedures behind the global rules for any of Kade's repositories: plan, gates, commit and PR style, state | Saved as a claude.ai account skill; every skill here is also copied to Antigravity by `agent-sync` |
@@ -29,8 +28,8 @@ the skills moved in from `kade-agent/claude-skills` with their history (step 4).
 | `agent-skills/session-resume/`, `session-handoff/` | Start a session from the recorded state; close one with a starter prompt | Account skills |
 | `scripts/skills/` | Scenario harness and fixtures for testing the skills | Run by the session changing a skill |
 | `docs/skills/` | The skills' scenarios, their results, and the improvement plan | Read by the session changing a skill |
-| `scripts/release.cjs` | `next`, `rc <tag>`, `stamp <tag>`, `latest`, `check-candidate <branch>`, `checks-passed <run id>`, `check-promote <rc tag>` | Called by the Candidate, Promote and Release workflows |
-| `docs/release-flow-plan.md` | Accepted 2026-10-20: releases from an immutable candidate branch, tagged `-rc.N`, then promoted without a rebuild | Built step by step (section 6) |
+| `scripts/release.cjs` | `next`, `rc <tag>`, `stamp <tag>`, `latest`, `check-candidate <branch>`, `checks-passed <run id>`, `check-promote <rc tag>`, `rc-branch <branch>`, `superseded <rc tag>`, `released <tag>` | Called by the Candidate and Promote workflows |
+| `docs/release-flow-plan.md` | Accepted 2026-10-20: releases from an immutable candidate branch, tagged `-rc.N`, then promoted from an `rc/<rc tag>` branch without a rebuild | Built step by step (section 6) |
 | `docs/global-rules-plan.md` | One global rule set checked out as `~/.claude` on every machine and in the cloud, plus rules per repository | Closed 2026-10-09; every step done |
 | `docs/refactor-plan.md` | Moving `CLAUDE.md`, `MEMORY.md`, skills and rules to this setup, per repository | Read by the session doing the work |
 | `docs/governance-plan.md` | Accepted: two daily reports over the working repositories, drift (rules and workflows, filed as issues) and daily results (per owner), built in `kade-agent/code-quality-assurance` | Built step by step (section 9) |

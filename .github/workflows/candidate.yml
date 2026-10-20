@@ -6,10 +6,11 @@
 #     next candidate number, writes the final tag into line 1 of AGENTS.md and runs every test on
 #     that tree,
 #   - creates one commit with that stamp whose parent is the main commit, tags it vYYYY.MM.DD-rc.N
-#     and makes a GitHub prerelease. global-sync ignores rc tags, so no session moves to it.
-# Promote (promote.yml), run from the rc tag, adds the final tag on the same commit.
-# Whatever happens, the last job deletes the branch; a failed candidate is fixed on main and
-# starts again with a new branch. Only the tag and cleanup jobs can write, and they run none of
+#     and makes a GitHub prerelease. global-sync ignores rc tags, so no session moves to it,
+#   - makes the branch rc/<rc tag> at that commit, for Promote (promote.yml) to run from (the
+#     GitHub app lists branches only), and deletes the same version's lower rc branches.
+# Whatever happens, the last job deletes the candidate/<sha> branch; a failed candidate is fixed
+# on main and starts again with a new branch. Only the tag and cleanup jobs can write, and they run none of
 # the repository's code; the tag job refuses unless the blob and tree it creates are the ones
 # the check job tested.
 name: Candidate
@@ -34,6 +35,7 @@ jobs:
     outputs:
       final: ${{ steps.stamp.outputs.final }}
       rc: ${{ steps.stamp.outputs.rc }}
+      superseded: ${{ steps.stamp.outputs.superseded }}
       blob: ${{ steps.stamp.outputs.blob }}
       tree: ${{ steps.stamp.outputs.tree }}
       content: ${{ steps.stamp.outputs.content }}
@@ -72,6 +74,7 @@ jobs:
           set -euo pipefail
           final=$(node scripts/release.cjs next)
           rc=$(node scripts/release.cjs rc "$final")
+          superseded=$(node scripts/release.cjs superseded "$rc")
           previous=$(node scripts/release.cjs latest)
           node scripts/release.cjs stamp "$final"
           stamp=$(head -n 1 AGENTS.md)
@@ -94,6 +97,7 @@ jobs:
           {
             echo "final=$final"
             echo "rc=$rc"
+            echo "superseded=$superseded"
             echo "blob=$(git rev-parse :AGENTS.md)"
             echo "tree=$(git write-tree)"
             echo "content=$(base64 -w0 AGENTS.md)"
@@ -106,14 +110,15 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
-      contents: write  # the stamped commit, the rc tag and the prerelease
+      contents: write  # the stamped commit, the rc tag, the prerelease and the rc branches
     steps:
-      - name: Create the stamped commit, the rc tag and the prerelease
+      - name: Create the stamped commit, the rc tag, the prerelease and the rc/ branch
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
           FINAL: ${{ needs.check.outputs.final }}
           RC: ${{ needs.check.outputs.rc }}
+          SUPERSEDED: ${{ needs.check.outputs.superseded }}
           BLOB: ${{ needs.check.outputs.blob }}
           TREE: ${{ needs.check.outputs.tree }}
           CONTENT: ${{ needs.check.outputs.content }}
@@ -148,9 +153,14 @@ jobs:
           base64 -d <<<"$NOTES" > "$RUNNER_TEMP/notes.md"
           gh release create "$RC" --repo "$REPO" --verify-tag --prerelease --title "$RC" \
             --notes-file "$RUNNER_TEMP/notes.md"
+          gh api "repos/$REPO/git/refs" -f ref="refs/heads/rc/$RC" -f sha="$commit" > /dev/null
+          for b in $SUPERSEDED; do
+            gh api -X DELETE "repos/$REPO/git/refs/heads/$b" > /dev/null || echo "::warning::could not delete $b"
+          done
           {
             echo "Candidate $RC at $commit (parent $GITHUB_SHA on main)."
-            echo "Try it in one session, then Actions > Promote > Run workflow > tag $RC."
+            if [ -n "$SUPERSEDED" ]; then echo "Deleted the superseded $SUPERSEDED."; fi
+            echo "Try it in one session, then Actions > Promote > Run workflow > branch rc/$RC."
           } >> "$GITHUB_STEP_SUMMARY"
 
   cleanup:

@@ -1,11 +1,13 @@
-# Promote (docs/release-flow-plan.md, sections 3 and 5). Kade runs it from a candidate tag
-# vYYYY.MM.DD-rc.N ("Use workflow from" lists tags), after trying that candidate in one session.
-# It refuses unless the tag is the highest rc of a version that is not released yet and is above
-# the latest release, its commit's AGENTS.md line 1 is that version, and its prerelease exists
-# (scripts/release.cjs check-promote). It then tags the same commit vYYYY.MM.DD and makes the
-# GitHub release, marked latest, with the prerelease's notes: nothing is built again. That tag
-# reaches every session at its next start (global-sync). Only the tag job can write, and it runs
-# none of the repository's code.
+# Promote (docs/release-flow-plan.md, sections 3 and 5). Kade runs it on the branch
+# rc/vYYYY.MM.DD-rc.N that Candidate made (the GitHub app lists branches, not tags), after
+# trying that candidate in one session. The tag is the record and the branch only a handle: it
+# refuses unless the branch head is the rc tag's commit, the tag is the highest rc of a version
+# that is not released yet and is above the latest release, its commit's AGENTS.md line 1 is that
+# version, and its prerelease exists (scripts/release.cjs rc-branch, check-promote). It then tags
+# the same commit vYYYY.MM.DD and makes the GitHub release, marked latest, with the prerelease's
+# notes: nothing is built again. That tag reaches every session at its next start (global-sync).
+# Last, it deletes the rc branches of that version and every older one; a failed run keeps them.
+# Only the tag job can write, and it runs none of the repository's code.
 name: Promote
 
 on:
@@ -27,13 +29,15 @@ jobs:
     outputs:
       final: ${{ steps.check.outputs.final }}
       commit: ${{ steps.check.outputs.commit }}
+      rc: ${{ steps.check.outputs.rc }}
+      released: ${{ steps.check.outputs.released }}
       notes: ${{ steps.check.outputs.notes }}
     steps:
-      - name: Only a candidate tag is promoted
+      - name: Only an rc/<rc tag> branch is promoted
         run: |
           case "$GITHUB_REF" in
-            refs/tags/v*-rc.*) ;;
-            *) echo "::error::Promote runs from a candidate tag vX-rc.N only; this run is on $GITHUB_REF"; exit 1 ;;
+            refs/heads/rc/v*-rc.*) ;;
+            *) echo "::error::Promote runs on a branch rc/vX-rc.N only; this run is on $GITHUB_REF"; exit 1 ;;
           esac
       - uses: actions/checkout@v4
         with:
@@ -49,25 +53,29 @@ jobs:
           REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
-          final=$(node scripts/release.cjs check-promote "$GITHUB_REF_NAME")
-          commit=$(git rev-parse "$GITHUB_REF_NAME^{commit}")
+          rc=$(node scripts/release.cjs rc-branch "$GITHUB_REF_NAME")
+          final=$(node scripts/release.cjs check-promote "$rc")
+          commit=$(git rev-parse "refs/tags/$rc^{commit}")
           if [ "$commit" != "$GITHUB_SHA" ]; then
-            echo "::error::$GITHUB_REF_NAME is at $commit, the run at $GITHUB_SHA"
+            echo "::error::$GITHUB_REF_NAME is at $GITHUB_SHA, not at its tag $rc ($commit)"
             exit 1
           fi
-          if [ "$(gh release view "$GITHUB_REF_NAME" --repo "$REPO" --json isPrerelease --jq .isPrerelease)" != true ]; then
-            echo "::error::$GITHUB_REF_NAME has no prerelease"
+          if [ "$(gh release view "$rc" --repo "$REPO" --json isPrerelease --jq .isPrerelease)" != true ]; then
+            echo "::error::$rc has no prerelease"
             exit 1
           fi
+          released=$(node scripts/release.cjs released "$final")
           {
-            echo "Global rules $final, promoted from $GITHUB_REF_NAME."
+            echo "Global rules $final, promoted from $rc."
             echo
-            gh release view "$GITHUB_REF_NAME" --repo "$REPO" --json body --jq .body
+            gh release view "$rc" --repo "$REPO" --json body --jq .body
           } > "$RUNNER_TEMP/notes.md"
           cat "$RUNNER_TEMP/notes.md" >> "$GITHUB_STEP_SUMMARY"
           {
             echo "final=$final"
             echo "commit=$commit"
+            echo "rc=$rc"
+            echo "released=$released"
             echo "notes=$(base64 -w0 "$RUNNER_TEMP/notes.md")"
           } >> "$GITHUB_OUTPUT"
 
@@ -77,17 +85,24 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
-      contents: write  # the tag and the release
+      contents: write  # the tag, the release and deleting the rc branches
     steps:
-      - name: Tag the candidate's commit and make the release
+      - name: Tag the candidate's commit, make the release, delete the rc branches
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
           FINAL: ${{ needs.check.outputs.final }}
           COMMIT: ${{ needs.check.outputs.commit }}
+          RC: ${{ needs.check.outputs.rc }}
+          RELEASED: ${{ needs.check.outputs.released }}
           NOTES: ${{ needs.check.outputs.notes }}
         run: |
           set -euo pipefail
+          head=$(gh api "repos/$REPO/git/ref/heads/$GITHUB_REF_NAME" --jq .object.sha)
+          if [ "$head" != "$COMMIT" ]; then
+            echo "::error::$GITHUB_REF_NAME moved from $COMMIT to $head"
+            exit 1
+          fi
           object=$(jq -n --arg tag "$FINAL" --arg sha "$COMMIT" \
                      '{tag: $tag, message: ("Global rules " + $tag), object: $sha, type: "commit"}' \
                    | gh api "repos/$REPO/git/tags" --input - --jq .sha)
@@ -95,4 +110,10 @@ jobs:
           base64 -d <<<"$NOTES" > "$RUNNER_TEMP/notes.md"
           gh release create "$FINAL" --repo "$REPO" --verify-tag --latest --title "$FINAL" \
             --notes-file "$RUNNER_TEMP/notes.md"
-          echo "Released $FINAL at $COMMIT, promoted from $GITHUB_REF_NAME." >> "$GITHUB_STEP_SUMMARY"
+          for b in $RELEASED; do
+            gh api -X DELETE "repos/$REPO/git/refs/heads/$b" > /dev/null || echo "::warning::could not delete $b"
+          done
+          {
+            echo "Released $FINAL at $COMMIT, promoted from $RC."
+            echo "Deleted the rc branches $RELEASED."
+          } >> "$GITHUB_STEP_SUMMARY"
