@@ -216,6 +216,17 @@ test("every skill in agent-skills/ has front matter naming its folder and a desc
   }
 });
 
+// Saving a skill to the claude.ai account (README, "Changing a skill") refuses a description with
+// angle brackets: release-flow's "candidate/<sha>" failed skill-creator's package check on 2026-10-20.
+test("no skill description holds angle brackets, which the account copy refuses", () => {
+  const dir = path.join(ROOT, "agent-skills");
+  for (const e of fs.readdirSync(dir, { withFileTypes: true }).filter((x) => x.isDirectory())) {
+    const text = fs.readFileSync(path.join(dir, e.name, "SKILL.md"), "utf8");
+    const description = /^description: (.*)$/m.exec(text)[1];
+    assert.doesNotMatch(description, /[<>]/, `${e.name}: description`);
+  }
+});
+
 // Releases follow one global skill in every repository (Kade, 2026-10-18): a version PR into main, a
 // PR from main into rc that the agent opens, then Kade's manual Release run on rc. The rules must send
 // every release there, and the skill must exist, so no repository needs its own release text.
