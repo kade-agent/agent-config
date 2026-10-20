@@ -222,8 +222,14 @@ leaves every other key and hook alone, and an unreadable `settings.json` untouch
 **A tag is a release.** Pushing `v2026.10.12` reaches every session at its next start, on every
 machine. So:
 
-- Since 2026-10-11 a release is the **Release** workflow (`.github/workflows/release.yml`), which
-  Kade starts on `rc` after merging a PR from `main` into `rc`. It picks the next tag from the UTC
+- **Since 2026-10-20 a release is Candidate, then Promote** (`docs/release-flow-plan.md`): an
+  agent pushes `candidate/<sha>` at a commit on `main`; Kade runs Candidate there (stamp, tests,
+  `vYYYY.MM.DD-rc.N`, a prerelease, a branch `rc/<rc tag>`), then Promote on that branch (the
+  final tag on the same stamped commit). `rc` and `release.yml` are gone. The rest of this list
+  is the history it replaced, and the guarantees it keeps: the stamp equals the tag, tags are
+  never moved or deleted, `global-sync` takes only numeric tags.
+- From 2026-10-11 to 2026-10-20 a release was the **Release** workflow
+  (`.github/workflows/release.yml`), which Kade started on `rc` after merging a PR from `main` into `rc`. It picks the next tag from the UTC
   date (`scripts/release.cjs next`, which refuses an `rc` commit already released), writes it into
   line 1 of `CLAUDE.md` (`stamp`), runs all tests on that tree, and creates one commit with the
   stamp whose parent is the `rc` commit, the tag on it and a GitHub release. `rc` and `main` are
@@ -231,7 +237,7 @@ machine. So:
   therefore cannot differ. The earlier two-phase `release.cjs prepare` / `tag` on `main` was
   removed after the first workflow release, `v2026.10.11`.
 - A tag ruleset on GitHub lets only Kade and GitHub Actions create `v*` tags and nobody move or
-  delete them; `main` and `rc` require a PR.
+  delete them; `main` requires a PR (`rc` did too, until it was deleted on 2026-10-20).
 - `global-sync.cjs` is the one file whose bug could stop updates everywhere, since it updates
   itself. It stays small, has the most tests, and every release is first tried in one session
   before Kade relies on it. Tags cannot be moved or deleted, so a bad release is fixed by a newer

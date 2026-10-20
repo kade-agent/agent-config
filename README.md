@@ -23,7 +23,7 @@ the skills moved in from `kade-agent/claude-skills` with their history (step 4).
 | `.github/workflows/project-sync.yml` | Adds issues to the Project "Kade Agent" and applies their `cmd:` labels, through the bridge in `kade-agent/.github` | Runs on issue events |
 | `.claude/CLAUDE.md` | This repository's own notes: where its state is, its gates | Read by sessions opened here; never deployed |
 | `agent-skills/repo-workflow/` | The procedures behind the global rules for any of Kade's repositories: plan, gates, commit and PR style, state | Saved as a claude.ai account skill; every skill here is also copied to Antigravity by `agent-sync` |
-| `agent-skills/release-flow/` | Every release: a version PR into `main`, a PR from `main` into `rc` that the agent opens, then Kade's manual Release run on `rc`; what a repository needs for it | Account skill |
+| `agent-skills/release-flow/` | Every release: a version PR into `main`, a `candidate/<sha>` branch the agent pushes, then Kade's Candidate and Promote runs (`docs/release-flow-plan.md`); what a repository needs for it | Account skill |
 | `agent-skills/handoff-trigger/` | When to ask about or recommend a handoff and a new session, from the context size and the next task | Account skill |
 | `agent-skills/session-resume/`, `session-handoff/` | Start a session from the recorded state; close one with a starter prompt | Account skills |
 | `scripts/skills/` | Scenario harness and fixtures for testing the skills | Run by the session changing a skill |
