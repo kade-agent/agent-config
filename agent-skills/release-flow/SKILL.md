@@ -1,15 +1,18 @@
 ---
 name: release-flow
-description: How every release is made in Kade's repositories - a version PR into main, a pull request from main into rc that the agent opens, then Kade's manual Release run on rc, which tags and publishes. Use whenever Kade asks for a release, a release candidate, a version bump or a tag, and before touching the rc branch, release workflows or release checks in any repository.
+description: How every release is made in Kade's repositories - a version PR into main, a candidate/<sha> branch the agent pushes at that main commit, Kade's Candidate run (an -rc.N tag, a prerelease and an rc/<rc tag> branch), then his Promote run on that rc/ branch, which tags the same commit and releases it without a rebuild. Use whenever Kade asks for a release, a release candidate, a version bump or a tag, and before touching candidate/ or rc/ branches, release workflows or release checks in any repository.
 ---
 
 # Release flow
 
 One flow in every repository; a repository's `AGENTS.md` (or `CLAUDE.md`) says only where its
-version and release notes live, never the flow itself.
+version and release notes live, never the flow itself. The design and its reasons:
+`kade-agent/agent-config` `docs/release-flow-plan.md`.
 
 ```
-main --(1) version PR--> main --(2) PR main -> rc--> rc --(3) Kade: Actions > Release on rc--> tag v<version> + release
+main --(1) version PR--> main --(2) agent: candidate/<12-character sha> at that main commit
+     --(3) Kade: Actions > Candidate on it --> tag v<version>-rc.N + prerelease + branch rc/<rc tag>
+     --(4) Kade tries it, then Actions > Promote on rc/<rc tag> --> tag v<version> + release
 ```
 
 ## 1. Version change into main
@@ -21,51 +24,67 @@ main --(1) version PR--> main --(2) PR main -> rc--> rc --(3) Kade: Actions > Re
 - A repository whose release tag is computed rather than written (agent-config: `vYYYY.MM.DD`)
   skips this step.
 
-## 2. Pull request from main into rc (the agent opens it)
+## 2. The candidate branch (the agent pushes it)
 
-- After step 1 has merged, `git fetch origin`, then open it with `main` itself as the head, never
-  a copy branch:
-  `gh pr create --repo <owner/repo> --base rc --head main --title "Release v<version>: main into rc"`.
-- The body: the version; what main brings into `rc` since the last release
-  (`git log --no-merges origin/rc..origin/main`, grouped by PR with links); the `NOT VERIFIED`
-  lines of those commits; what Kade should try on the candidate build, if the repository makes one.
-- Not a draft, and no auto-merge: Kade merges it by hand. Read its checks and report them. A red
-  check is fixed on `main` (a fix PR, or step 1 again); the open PR follows `main` by itself.
-- One such PR at a time; if one is already open, update its body instead of opening another.
+- The one branch an agent pushes outside `claude/<task>` (or `agent/<task>`), and never pushed
+  to again: `candidate/<12-character sha>`, at a commit already on `main`, with no commit of its own.
+- After step 1 has merged: `git fetch origin main`; on the merge commit every check run has
+  finished and none failed. Then
+  `git push origin <sha>:refs/heads/candidate/<first 12 characters of sha>`.
+- Wait for the **Candidate guard** run on that push (`candidate-guard.yml`) to pass; it deletes
+  a branch with a wrong name, a commit not on `main`, or a second push.
+- Tell Kade: "Actions > Candidate > Run workflow > branch `candidate/<sha>`", with the version,
+  what `main` brings since the last release (`git log --no-merges <latest v tag>..<sha>`, grouped
+  by PR with links), the `NOT VERIFIED` lines of those commits, and what to try on the prerelease.
+- One candidate branch at a time. A cloud session cannot delete a branch: one left behind by
+  mistake is Kade's to delete.
 
-## 3. Kade runs the release
+## 3. Kade: Candidate
 
-- Tell Kade it is ready: "Actions > Release > Run workflow > branch `rc`". He starts it; the
-  workflow checks rc's head, gates, builds, creates the tag `v<version>` on that commit and
-  publishes.
-- When he asks, read the run (`gh run list --workflow release.yml`, `gh run view --log-failed`)
-  and record the result on the issue. A failed run is fixed on `main` and goes through 2 and 3
-  again; a half-made release (a tag or release left behind) is reported, and Kade removes it.
+- It refuses unless the branch names its commit, the commit is on `main` with its checks passed,
+  no other `candidate/*` branch exists, the branch has not moved and the version is new. It
+  builds and tests once, tags `v<version>-rc.N`, makes a prerelease with the assets, makes the
+  branch `rc/<rc tag>` at the tag's commit, and deletes the same version's lower `rc/` branches.
+  Whatever happens, it deletes the `candidate/` branch.
+- When he asks, read the run and record the result on the issue. A failed run is fixed on `main`
+  and starts again at step 2; one refused only because `main`'s checks had not finished may be
+  pushed again at the same commit.
+
+## 4. Kade: Promote
+
+- He tries the prerelease, then runs "Actions > Promote > Run workflow > branch `rc/<rc tag>`".
+  It refuses unless the branch is at its tag's commit, that tag is the version's highest rc and
+  the version is still new; it tags the same commit `v<version>` and makes the release with the
+  same assets, never rebuilt. Then it deletes the `rc/` branches of that version and older.
+- When he asks, read the run. A failed Promote deletes nothing and can run again; a half-made
+  release (a tag or release left behind) is reported, and Kade removes it.
 
 ## Never
 
-- Push a `v*` tag, create, edit or delete a GitHub release, or start the Release workflow.
-- Commit or push to `rc`, open a PR into `rc` from anything but `main`, or merge `rc` into `main`.
+- Push a `v*` tag, create, edit or delete a GitHub release, or start any workflow.
+- Push an `rc/` branch, push to an existing `candidate/` branch, add a commit to one, or point
+  one at a commit that is not on `main`.
+- Open a PR into a release branch, or keep a long-lived `rc` branch.
 - Work around a refused check (the head, the version, the notes) instead of fixing it on `main`.
 
 ## What a repository needs for this flow
 
-Moving a repository onto it is its own task (plan first). The pieces:
+Moving a repository onto it is its own task (plan first). The pieces, as in agent-config:
 
-- **`release-checks.yml`** on `pull_request` into `rc`: `the head is main` (head ref `main`, same
-  repository) and `version is new` (above every `v*` tag, not tagged yet; release notes fit, if
-  the repository keeps them).
-- **`release.yml`** on `workflow_dispatch` only. It refuses unless it runs on `rc`, rc's head is the
-  merge of a PR from `main` into `rc` whose head has the same tree, that commit has no `v*` tag,
-  and the version is new. It creates the annotated tag on that commit itself and then the release
-  (`gh release create --verify-tag`). The workflow is read from `rc`: a change to it acts after it
-  reaches `rc`.
-- **Rulesets (Kade's):** on `rc`, both checks required (a skipped job counts as passed, so
-  `the head is main` on its own too) and no direct pushes; on `v*` tags, no moving or deleting.
-- Auto-merge acts only on `claude/*` into `main`, never on a PR into `rc`.
-- Optional: a candidate build on every push to `rc` (a prerelease Kade tests before step 3).
-- The repository's rules: one line pointing here, plus where its version and notes live.
+- **`candidate.yml`** (`workflow_dispatch`): the checks of step 3, the repository's build and
+  tests, `SHA256SUMS`, the rc tag, the prerelease and the `rc/` branch, all made with
+  `GITHUB_TOKEN`; a last job (`if: always()`) deletes the `candidate/` branch.
+- **`promote.yml`** (`workflow_dispatch`): the checks of step 4, the assets downloaded and checked
+  against `SHA256SUMS`, the final tag on the same commit, the release, the `rc/` branches deleted.
+- **`candidate-guard.yml`** on push to `candidate/**` and `rc/**`. No new rulesets; a `v*` tag
+  ruleset stays where one exists.
+- No `rc` branch (git cannot hold `rc` beside `rc/…`), no `release-checks.yml`, no release ruleset
+  on `rc`. Auto-merge acts only on `claude/*` into `main`.
+- A signed update feed: the binary carries the final version and is signed once, in Candidate;
+  Promote reuses the files and their signatures and writes only the stable feed entry
+  (`docs/release-flow-plan.md`, section 5a).
+- The repository's rules: one line pointing here, plus where its version and notes live; its
+  profile in `kade-agent/code-quality-assurance` names the flow.
 
-Reference implementations: `stella-rain/core` (`release.yml`, `release-checks.yml`, ADR-054);
-`star-resonance/resonance-stream` (D-30: a candidate exe on `rc`, a signed update feed);
-`kade-agent/agent-config` (a date tag that stamps line 1 of `AGENTS.md`).
+Reference implementation: `kade-agent/agent-config` (`candidate.yml`, `promote.yml`,
+`candidate-guard.yml`, `scripts/release.cjs`; a date tag that stamps line 1 of `AGENTS.md`).
