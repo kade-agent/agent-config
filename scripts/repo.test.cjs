@@ -226,3 +226,20 @@ test("AGENTS.md sends every release to the release-flow skill, and the skill exi
   assert.ok(fs.existsSync(path.join(ROOT, "agent-skills", "release-flow", "SKILL.md")),
     "agent-skills/release-flow/SKILL.md exists");
 });
+
+// The candidate flow (docs/release-flow-plan.md, step 4): the agent pushes candidate/<12-character
+// sha> at a commit on main, Kade runs Candidate, then Promote on rc/<rc tag>. The skill describes
+// the flow and no longer the PR from main into rc. AGENTS.md sends every release to the skill
+// (Precedence, tested above) and has no room for the branch (60 lines), so the skill names it as
+// the one branch an agent pushes outside claude/<task>, never pushed to again.
+test("release-flow describes Candidate and Promote, and the candidate branch an agent pushes once", () => {
+  const skill = fs.readFileSync(path.join(ROOT, "agent-skills", "release-flow", "SKILL.md"), "utf8").replace(/\s+/g, " ");
+  for (const needle of ["candidate/<12-character sha>", "rc/<rc tag>", "Actions > Candidate", "Actions > Promote", "candidate-guard.yml"]) {
+    assert.ok(skill.includes(needle), `the skill names ${needle}`);
+  }
+  for (const gone of ["--base rc", "PR from main into rc", "pull request from main into rc", "Release on rc"]) {
+    assert.ok(!skill.includes(gone), `the skill no longer says ${gone}`);
+  }
+  assert.ok(skill.includes("never pushed to again"), "the skill keeps the candidate branch immutable");
+  assert.ok(skill.includes("outside `claude/<task>`"), "the skill names it as the exception to the Branches rule");
+});
