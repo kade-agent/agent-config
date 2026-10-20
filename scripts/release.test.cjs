@@ -192,3 +192,24 @@ test("check-candidate reads HEAD, origin/main and the origin's candidate branche
   const off = git(dev, "rev-parse", "HEAD").slice(0, 12);
   assert.throws(() => release(dev, "check-candidate", `candidate/${off}`), /not on origin\/main/);
 });
+
+// A candidate that failed leaves its check runs on the main commit; a new candidate branch at the
+// same commit must not be refused for them, nor for a guard run of an earlier push there.
+test("checksPassed leaves out the candidate workflows' own jobs from any run", () => {
+  const run = (name, conclusion, id) => ({ name, status: "completed", conclusion, details_url: `https://github.com/o/r/actions/runs/${id}/job/9` });
+  assert.doesNotThrow(() => r.checksPassed([
+    run("test", "success", 1),
+    run("check, stamp and test", "failure", 2),
+    run("delete the candidate branch", "success", 2),
+    run("candidate branch unchanged", "failure", 3),
+  ], "7"));
+  assert.throws(() => r.checksPassed([run("check, stamp and test", "success", 2)], "7"), /no check run/);
+});
+
+test("the job names checksPassed leaves out are the candidate workflows' jobs", () => {
+  const text = ["candidate.yml", "candidate-guard.yml"]
+    .map((f) => fs.readFileSync(path.join(__dirname, "..", ".github", "workflows", f), "utf8"))
+    .join("\n");
+  const names = [...text.matchAll(/^ {4}name: (.+)$/gm)].map((m) => m[1]);
+  assert.deepStrictEqual([...r.CANDIDATE_JOBS].sort(), names.sort());
+});
