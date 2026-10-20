@@ -213,3 +213,38 @@ test("the job names checksPassed leaves out are the candidate workflows' jobs", 
   const names = [...text.matchAll(/^ {4}name: (.+)$/gm)].map((m) => m[1]);
   assert.deepStrictEqual([...r.CANDIDATE_JOBS].sort(), names.sort());
 });
+
+// Promote runs from a branch candidate/<rc tag>, which Candidate makes at the rc tag's commit: the
+// GitHub app lists branches only (Kade, 2026-10-20). The tag stays the record; the branch is a
+// handle, deleted once superseded or released.
+test("rcOfBranch reads the rc tag out of candidate/<rc tag> and refuses anything else", () => {
+  assert.strictEqual(r.rcOfBranch("candidate/v2026.10.20-rc.1"), "v2026.10.20-rc.1");
+  assert.strictEqual(r.rcOfBranch("candidate/v0.0.1-rc.12"), "v0.0.1-rc.12");
+  for (const b of ["candidate/0123456789ab", "candidate/v2026.10.20", "main", "rc", "candidate/v1-rc.x"]) {
+    assert.throws(() => r.rcOfBranch(b), /not candidate\/<rc tag>/, b);
+  }
+});
+
+test("supersededBranches are the same version's rc branches below the new rc", () => {
+  const branches = ["candidate/v1.2.0-rc.1", "candidate/v1.2.0-rc.2", "candidate/v1.1.0-rc.4", "candidate/0123456789ab", "candidate/v1.2.0-rc.3"];
+  assert.deepStrictEqual(r.supersededBranches(branches, "v1.2.0-rc.3"), ["candidate/v1.2.0-rc.1", "candidate/v1.2.0-rc.2"]);
+  assert.deepStrictEqual(r.supersededBranches([], "v1.2.0-rc.1"), []);
+});
+
+test("releasedBranches are the rc branches of the released version and every older one", () => {
+  const branches = ["candidate/v1.2.0-rc.1", "candidate/v1.2.0-rc.2", "candidate/v1.1.0-rc.4", "candidate/v1.3.0-rc.1", "candidate/0123456789ab", "main"];
+  assert.deepStrictEqual(r.releasedBranches(branches, "v1.2.0"), ["candidate/v1.2.0-rc.1", "candidate/v1.2.0-rc.2", "candidate/v1.1.0-rc.4"]);
+});
+
+test("checkCandidate counts only candidate/<sha> branches as left over, not rc branches", () => {
+  const head = "0123456789abcdef0123456789abcdef01234567";
+  assert.doesNotThrow(() => r.checkCandidate("candidate/0123456789ab", head, true, ["candidate/v2026.10.20-rc.1"]));
+});
+
+test("rc-branch, superseded and released read the branch name and origin's candidate branches", () => {
+  const { dev } = released();
+  git(dev, "push", "-q", "origin", "HEAD:refs/heads/candidate/v2026.10.12-rc.1", "HEAD:refs/heads/candidate/v2026.10.09.3-rc.1", "HEAD:refs/heads/candidate/v2026.10.13-rc.1");
+  assert.strictEqual(release(dev, "rc-branch", "candidate/v2026.10.12-rc.1").trim(), "v2026.10.12-rc.1");
+  assert.strictEqual(release(dev, "superseded", "v2026.10.12-rc.2").trim(), "candidate/v2026.10.12-rc.1");
+  assert.strictEqual(release(dev, "released", "v2026.10.12").trim(), "candidate/v2026.10.09.3-rc.1 candidate/v2026.10.12-rc.1");
+});
