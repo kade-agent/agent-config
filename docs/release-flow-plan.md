@@ -198,8 +198,11 @@ the bytes users get.
    not be started from the GitHub app, which lists no tags: decision 9, built in its own PR.
    Kade then promoted rc.1 from the browser (its commit holds the tag-based `promote.yml`):
    `v2026.10.20` on `0971b99`, the latest release. He deleted `rc`; the PR of decision 9
-   moved the promotable branches to `rc/` and removed `release.yml`. Left: the first
-   candidate and Promote on an `rc/` branch, from the app.
+   moved the promotable branches to `rc/` and removed `release.yml`. **Done 2026-10-20**:
+   from the app, Candidate on `candidate/b427341632db` made `v2026.10.20.2-rc.1` (`900bdd9`,
+   parent `b427341`) and `rc/v2026.10.20.2-rc.1`; Promote on that branch tagged
+   `v2026.10.20.2` on the same commit, the latest release, and no `candidate/` or `rc/`
+   branch was left.
 4. **The global rules and the skill** (a draft PR, released through the new flow): the Branches
    bullet of `AGENTS.md` names `candidate/<12-character sha>` as the one branch an agent creates outside
    `claude/<task>`, immutable once created; `agent-skills/release-flow/SKILL.md` describes
