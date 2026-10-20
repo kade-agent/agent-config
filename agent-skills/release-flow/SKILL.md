@@ -1,6 +1,6 @@
 ---
 name: release-flow
-description: How every release is made in Kade's repositories - a version PR into main, a candidate/<sha> branch the agent pushes at that main commit, Kade's Candidate run (an -rc.N tag, a prerelease and an rc/<rc tag> branch), then his Promote run on that rc/ branch, which tags the same commit and releases it without a rebuild. Use whenever Kade asks for a release, a release candidate, a version bump or a tag, and before touching candidate/ or rc/ branches, release workflows or release checks in any repository.
+description: How every release is made in Kade's repositories - a version PR into main, a candidate/SHA branch the agent pushes at that main commit, Kade's Candidate run (an -rc.N tag, a prerelease and an rc/ branch named after that tag), then his Promote run on that rc/ branch, which tags the same commit and releases it without a rebuild. Use whenever Kade asks for a release, a release candidate, a version bump or a tag, and before touching candidate/ or rc/ branches, release workflows or release checks in any repository.
 ---
 
 # Release flow
