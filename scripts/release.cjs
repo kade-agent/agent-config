@@ -14,7 +14,8 @@
 //   check-candidate B refuses unless B is candidate/<12-character sha of HEAD>, HEAD is on
 //                     origin/main and origin has no other candidate/* branch
 //   checks-passed ID  reads a commit's check runs (the API's JSON) on stdin; refuses unless one
-//                     ran, all finished and none failed, leaving out run ID's own jobs
+//                     ran, all finished and none failed, leaving out run ID's own jobs and the
+//                     candidate workflows' jobs from any run
 //   check-promote R   refuses unless R is the highest rc tag of a new version whose commit's
 //                     AGENTS.md line 1 is that version; prints the final tag
 //
@@ -38,6 +39,14 @@ function nextTag(date, tags) {
 }
 
 const CANDIDATE = /^(v\d+(?:\.\d+)*)-rc\.(\d+)$/;
+// The jobs of candidate.yml and candidate-guard.yml: their check runs on a main commit, from this
+// run or an earlier candidate there, are not the commit's CI.
+const CANDIDATE_JOBS = new Set([
+  "check, stamp and test",
+  "rc tag and prerelease",
+  "delete the candidate branch",
+  "candidate branch unchanged",
+]);
 const FAILED = new Set(["failure", "timed_out", "cancelled", "action_required", "stale", "startup_failure"]);
 
 function candidates(final, tags) {
@@ -62,7 +71,7 @@ function checkCandidate(branch, head, onMain, others) {
 
 function checksPassed(runs, runId) {
   const own = `/actions/runs/${runId}/`;
-  const others = runs.filter((c) => !String(c.details_url || "").includes(own));
+  const others = runs.filter((c) => !String(c.details_url || "").includes(own) && !CANDIDATE_JOBS.has(c.name));
   if (!others.length) throw new Error("no check run on this commit besides this run");
   const bad = others
     .filter((c) => c.status !== "completed" || FAILED.has(c.conclusion))
@@ -169,4 +178,4 @@ if (require.main === module) {
   }
 }
 
-module.exports = { nextTag, setStamp, rcTag, checkCandidate, checksPassed, checkPromote };
+module.exports = { nextTag, setStamp, rcTag, checkCandidate, checksPassed, checkPromote, CANDIDATE_JOBS };
