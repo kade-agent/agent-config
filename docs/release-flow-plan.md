@@ -1,7 +1,7 @@
 # Plan: releases from an immutable candidate branch, tagged -rc.N, then promoted
 
 - **Scope:** how every release is made in Kade's repositories (the `release-flow` skill), and
-  agent-config's own Release workflow as the first repository moved onto it.
+  agent-config's own release workflows as the first repository moved onto it.
 - **Status:** **accepted** (2026-10-20, by Kade, in the merge of #95). Kade answered the open
   questions the same day (decisions 5 to 8). Section 6 is built step by step from here, each
   step one PR.
@@ -22,12 +22,13 @@
   7. **Signed update feeds stay**, built once (section 5a).
   8. Candidate's "CI passed" check needs no check name per repository: every check run on the
      commit has finished, none failed, at least one ran (section 3).
-  9. **Promote runs on a branch `candidate/<rc tag>`**, not on the tag: the GitHub mobile app
-     lists branches only. Candidate makes that branch at the rc tag's commit; the tag stays the
+  9. **Promote runs on a branch `rc/<rc tag>`**, not on the tag: the GitHub mobile app lists
+     branches only. Candidate makes that branch at the rc tag's commit; the tag stays the
      record, the branch is a handle that Promote checks against it. Candidate deletes the
      version's lower rc branches; Promote deletes the released version's and every older one's.
-     The branch an agent pushes is `candidate/<12-character sha>` in every repository, so the
-     two kinds never meet. (Kade, after the first Candidate run of step 3.)
+     The branch an agent pushes is `candidate/<12-character sha>` in every repository; `rc/`
+     holds only what can be promoted. `rc/` needs the old `rc` branch gone (git cannot hold
+     `rc` and `rc/x`): Kade deleted it after promoting `v2026.10.20`. (Kade, during step 3.)
 
 ## 1. The problem
 
@@ -69,8 +70,8 @@ C: a `release/vX.Y` branch is cut from that version's tag then, under its own pl
 main --(1) version PR--> main
      --(2) agent: candidate/<12-character sha> at that main commit
      --(3) Kade: Actions > Candidate on that branch --> tag v<version>-rc.N + prerelease
-                 + branch candidate/v<version>-rc.N; the sha branch deleted
-     --(4) Kade tries the prerelease, then Actions > Promote on branch candidate/v<version>-rc.N
+                 + branch rc/v<version>-rc.N; the sha branch deleted
+     --(4) Kade tries the prerelease, then Actions > Promote on branch rc/v<version>-rc.N
                  --> tag v<version> + release; the rc branches of that version and older deleted
 ```
 
@@ -94,14 +95,14 @@ main --(1) version PR--> main
 
    It then builds and tests once, creates the annotated tag `v<version>-rc.N` (N is one more
    than that version's highest rc tag) and a GitHub prerelease with the assets and a
-   `SHA256SUMS` file, then the branch `candidate/v<version>-rc.N` at the tag's commit, and
+   `SHA256SUMS` file, then the branch `rc/v<version>-rc.N` at the tag's commit, and
    deletes that version's lower rc branches (only the highest rc can be promoted). A last job,
    `if: always()`, deletes the `candidate/<sha>` branch: after a candidate, a failure, or a
    cancel. A failed candidate is never re-run; it is fixed on `main` and starts again at step 2
    (a candidate refused only because `main`'s CI had not finished may be pushed again at the
    same commit).
 4. **Promote** (`promote.yml`, `workflow_dispatch`). Kade runs it on the branch
-   `candidate/v<version>-rc.N`, so the workflow is read from the candidate's commit. The tag is
+   `rc/v<version>-rc.N`, so the workflow is read from the candidate's commit. The tag is
    the record and the branch a handle: Promote refuses unless the branch head is the rc tag's
    commit (read again before tagging), that tag is the version's highest rc tag, its prerelease
    exists and its assets match `SHA256SUMS`, and the version is still new. It creates the
@@ -113,7 +114,7 @@ main --(1) version PR--> main
 
 **Who does what:** the agent does steps 1 and 2 and reads the runs; Kade starts steps 3 and 4.
 An agent never creates a tag or release, never starts a workflow, never pushes a
-`candidate/<rc tag>` branch, never pushes to an existing `candidate/*` branch, and never points
+`rc/*` branch, never pushes to an existing `candidate/*` branch, and never points
 one at a commit that is not on `main`. A cloud session cannot delete a branch (its git proxy
 refuses), so a branch it left behind by mistake is Kade's to delete.
 
@@ -126,8 +127,8 @@ No rulesets (decision 6). Two workflows keep the branch as it was created:
   is on `origin/main`; otherwise the guard deletes the branch and fails. A push that updates it
   (`created` false, `deleted` false), forced or not, makes the guard delete the branch and
   fail, naming the commit it pointed at; the candidate starts again at step 2. A deletion is
-  ignored. A `candidate/<rc tag>` branch is made only by Candidate, so a push that creates or
-  updates one is deleted too. The workflows create and delete branches with `GITHUB_TOKEN`,
+  ignored. It also runs on `rc/**`: an `rc/` branch is made only by Candidate, so a push that
+  creates or updates one is deleted. The workflows create and delete branches with `GITHUB_TOKEN`,
   which starts no workflow.
 - **The guard runs only for commits that contain it**: a push runs the pushed commit's own
   workflow files. Every candidate is a `main` commit after #97, so it always has one; a branch
@@ -160,8 +161,8 @@ No rulesets (decision 6). Two workflows keep the branch as it was created:
   1 origin tag <rc tag>` and `checkout -f --detach <rc tag>`; the next session start moves it on
   to the final tag once promoted.
 - **`test.yml`** on a tag compares the stamp with the tag name less its `-rc.N` suffix.
-- **Removed after the first promoted release:** `release.yml` on `rc`, the `rc` branch and its
-  ruleset (Kade's).
+- **Removed after the first promoted release** (`v2026.10.20`): the `rc` branch and its ruleset
+  (Kade), and `release.yml`, which ran only on `rc`.
 
 ## 5a. Signed update feeds, built once
 
@@ -195,9 +196,10 @@ the bytes users get.
    `47b24fa`, only line 1 of `AGENTS.md` changed) and deleted the branch; a second Candidate on
    the same commit failed with "already a candidate" and deleted the branch too. Promote could
    not be started from the GitHub app, which lists no tags: decision 9, built in its own PR.
-   Left: Promote, from the browser for rc.1 (its commit holds the tag-based `promote.yml`) or
-   on the branch of the next candidate. Then Kade deletes `rc` and its ruleset, and a PR
-   removes `release.yml`.
+   Kade then promoted rc.1 from the browser (its commit holds the tag-based `promote.yml`):
+   `v2026.10.20` on `0971b99`, the latest release. He deleted `rc`; the PR of decision 9
+   moved the promotable branches to `rc/` and removed `release.yml`. Left: the first
+   candidate and Promote on an `rc/` branch, from the app.
 4. **The global rules and the skill** (a draft PR, released through the new flow): the Branches
    bullet of `AGENTS.md` names `candidate/<12-character sha>` as the one branch an agent creates outside
    `claude/<task>`, immutable once created; `agent-skills/release-flow/SKILL.md` describes
