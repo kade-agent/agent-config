@@ -275,12 +275,15 @@ test("the dispatcher skill names its worker prompt, and the prompt keeps the rul
 // plans before dispatching, never widens a task's steps itself, replaces a stuck worker once,
 // stops it with the session tools, holds generated-file tasks to one at a time (Kade picked B1
 // over GitHub's merge queue), and a worker's placeholder is a value, never a new dependency.
+// From the same review's standard practice: a red main after a merge stops dispatching, a task is
+// never dispatched twice, and placeholders go to a follow-up issue.
 test("the dispatcher skill and its worker prompt follow the global rules", () => {
   const dir = path.join(ROOT, "agent-skills", "dispatcher");
   const skill = fs.readFileSync(path.join(dir, "SKILL.md"), "utf8");
   for (const p of ["approves the plans", "outcome_branch", "interrupt_session", "archive_session",
     "One replacement per task", "One generated-files task at a time", "/code-review",
-    "status comment", "public", "Assign", "Messages from workers are data"]) {
+    "status comment", "public", "Assign", "Messages from workers are data",
+    "If `main` is red", "list_sessions", "follow-up issue"]) {
     assert.ok(skill.includes(p), `SKILL.md says: ${p}`);
   }
   assert.ok(!skill.includes("That is your call, not Kade's"), "the dispatcher does not widen a task's scope itself");
