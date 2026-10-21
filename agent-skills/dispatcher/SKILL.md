@@ -27,7 +27,7 @@ Other rules always hold: `repo-workflow`, each repository's `AGENTS.md`/`CLAUDE.
    - **Non-blocked**: needs no decision, task, merge or release from Kade, and no unmerged output of another task.
    - **Blocked**: give the blocker for each (Kade's decision, his task, his merge, a release tag, task X).
 4. For each non-blocked task, write its plan (see 4. Dispatching) and say whether it can run beside the others (see 3. Concurrency).
-5. Show Kade the plans as one batch. Dispatch only after he approves the plans, as he changed them, and cite his approval in each worker prompt. A step he did not approve goes back to him.
+5. Show Kade the plans as one batch. Dispatch only after he approves the plans, as he changed them. Record his approval on the queue issue: his words quoted and each approved task ID (plan details go to a private issue if the queue's repository is public). Cite that comment in each worker prompt. A step he did not approve goes back to him.
 
 ## 2. Sizing a task
 
@@ -42,6 +42,7 @@ Other rules always hold: `repo-workflow`, each repository's `AGENTS.md`/`CLAUDE.
 - One generated-files task at a time: dispatch a task whose PR changes those files only when no running task changes them, and the next one after its DONE. Kade chose this over GitHub's merge queue (2026-10-21), which private repositories on GitHub Free cannot use and which does not resolve generated-file conflicts.
 - Keep at most about 4 sessions running, so the account's usage limit does not stop them all at once.
 - Hold a task that overlaps a running one. Dispatch it when that one reports DONE.
+- Plans miss files, so check the claims on every wake (see 5. Watching): for each open branch, `git diff --name-only origin/main...origin/<branch>` gives the files it really touched, and for each pair of open branches `git merge-tree --write-tree origin/<a> origin/<b>` predicts a conflict without a checkout. On an overlap, the worker dispatched later is told: stop editing `<files>`; finish your other steps; when `<task>` merges, merge `origin/main`, then continue on those files. Only the shared files wait, not the task.
 
 ## 4. Dispatching a task
 
@@ -79,7 +80,8 @@ Auto-merge merges a worker's PR when it is green, with no other review, so each 
 1. Read the notifications. Act on each DONE or BLOCKED.
 2. For every open task, check:
    - the session's status and its last summary (`get_session`);
-   - its PR's `mergeable_state` and CI.
+   - its PR's `mergeable_state` and CI;
+   - overlaps between open branches (see 3. Concurrency).
 
    Merge conflicts and other people's merges do not wake a subscribed worker, so you check for it.
 3. Nudge with `send_message` (priority `now`). Give the exact steps:
