@@ -254,3 +254,19 @@ test("release-flow describes Candidate and Promote, and the candidate branch an 
   assert.ok(skill.includes("never pushed to again"), "the skill keeps the candidate branch immutable");
   assert.ok(skill.includes("outside `claude/<task>`"), "the skill names it as the exception to the Branches rule");
 });
+
+// The dispatcher skill (Kade, 2026-10-21) runs a queue through sub sessions. A worker left waiting is
+// the failure it exists to prevent, so its worker prompt must keep the rules that stop it: subscribe
+// to the PR, push after every commit, check mergeability itself, and report DONE or BLOCKED.
+test("the dispatcher skill names its worker prompt, and the prompt keeps the rules against stuck workers", () => {
+  const dir = path.join(ROOT, "agent-skills", "dispatcher");
+  const skill = fs.readFileSync(path.join(dir, "SKILL.md"), "utf8");
+  assert.ok(skill.includes("references/worker-prompt.md"), "SKILL.md names references/worker-prompt.md");
+  for (const p of ["task_model", "decision_model", "non_blocked", "[Dispatcher]", "send_later"]) {
+    assert.ok(skill.includes(p), `SKILL.md names ${p}`);
+  }
+  const prompt = fs.readFileSync(path.join(dir, "references", "worker-prompt.md"), "utf8");
+  for (const p of ["subscribe_pr_activity", "PUSH after every commit", "mergeable state yourself", "DONE <task id>", "BLOCKED <task id>", "Never one big commit"]) {
+    assert.ok(prompt.includes(p), `the worker prompt keeps: ${p}`);
+  }
+});
