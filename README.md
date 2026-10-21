@@ -26,6 +26,7 @@ the skills moved in from `kade-agent/claude-skills` with their history (step 4).
 | `agent-skills/release-flow/` | Every release: a version PR into `main`, a `candidate/<sha>` branch the agent pushes, then Kade's Candidate and Promote runs (`docs/release-flow-plan.md`); what a repository needs for it | Account skill |
 | `agent-skills/handoff-trigger/` | When to ask about or recommend a handoff and a new session, from the context size and the next task | Account skill |
 | `agent-skills/session-resume/`, `session-handoff/` | Start a session from the recorded state; close one with a starter prompt | Account skills |
+| `agent-skills/dispatcher/` | Run a work queue through sub sessions: non-blocked tasks first, one PR each, a detailed plan per worker (`references/worker-prompt.md`), every session watched until it reports DONE and its PR is merged, Kade's decisions on cards | Account skill |
 | `scripts/skills/` | Scenario harness and fixtures for testing the skills | Run by the session changing a skill |
 | `docs/skills/` | The skills' scenarios, their results, and the improvement plan | Read by the session changing a skill |
 | `scripts/release.cjs` | `next`, `rc <tag>`, `stamp <tag>`, `latest`, `check-candidate <branch>`, `checks-passed <run id>`, `check-promote <rc tag>`, `rc-branch <branch>`, `superseded <rc tag>`, `released <tag>` | Called by the Candidate and Promote workflows |
