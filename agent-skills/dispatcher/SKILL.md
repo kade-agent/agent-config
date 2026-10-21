@@ -45,7 +45,7 @@ Other rules always hold: `repo-workflow`, each repository's `AGENTS.md`/`CLAUDE.
 
 ## 4. Dispatching a task
 
-Create the session with `create_session`:
+First look for a session already tagged `task:<id>` (`list_sessions` with that tag): a running one is the task's worker, so never dispatch a task twice. Otherwise create the session with `create_session`:
 - `title` is `[<Task ID>] <Task name>`, for example `[E1] No announce for enemy big patterns`. A worker that replaces a stopped one keeps the same title.
 - `model` is `task_model`, or `decision_model` for an options doc.
 - `source_url` is the task's repository.
@@ -88,7 +88,7 @@ Auto-merge merges a worker's PR when it is green, with no other review, so each 
    - **Stopped by the usage limit:** set a `send_later` at the reset time in its status, then tell it to continue.
    - **BLOCKED for files the plan's steps need:** widen the file list when the change stays small. A new step or behaviour is Kade's (see 6. Decisions).
 4. Two nudges without progress: stop the session with `interrupt_session`, and start a new one on the branch head (`source_revision`, the same `outcome_branch`). Tell the new worker what is done and what is left, then `archive_session` the old one. One replacement per task: if the replacement stalls too, the task is blocked and goes to Kade.
-5. After any merge, check every other open PR in that repository, because the merge often puts them behind.
+5. After any merge, check CI on `main` and every other open PR in that repository, because the merge often puts them behind. If `main` is red, dispatch nothing new: send a revert-or-fix task first, tell Kade, and tell running workers not to merge `origin/main` until it is green. Two PRs green alone can be red together.
 
 **Check-ins.** While any task is open, keep one self check-in with `send_later`, about 40 minutes ahead, so you can catch a worker that went silent. When it fires, run the wake routine. Never poll with `sleep`.
 
@@ -96,7 +96,7 @@ When a task is DONE, dispatch whatever it unblocked.
 
 ## 6. Decisions
 
-1. Collect the follow-ups workers report: ADR departures, placeholder numbers, open design questions.
+1. Collect the follow-ups workers report: ADR departures, placeholder numbers, open design questions. On each DONE, add its placeholders to one follow-up issue for the queue (opened on the first one), so none is lost once its PR merges; assign it to Kade when one needs his decision.
 2. Design work with no options yet gets an **options doc** task, on `decision_model`. The doc gives A/B/C per question with one recommended option, and its DONE lists "Questions for Kade".
 3. Put decisions to Kade in this session:
    - use `AskUserQuestion`, at most 4 questions per card, with the recommended option first;
