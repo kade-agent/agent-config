@@ -80,11 +80,22 @@ test("the three setup scripts check out agents.json and agent-skills/, and the a
   assert.deepStrictEqual(excluded(["agents.json", "agent-skills/repo-workflow/SKILL.md"]), []);
 });
 
-test("AGENTS.md starts with a release stamp and stays within 60 lines", () => {
+test("AGENTS.md starts with a release stamp and stays within 64 lines", () => {
   const text = fs.readFileSync(path.join(ROOT, "AGENTS.md"), "utf8");
   assert.ok(readStamp(text), 'line 1 must be "Global rules: v<version>"');
   const lines = text.trimEnd().split("\n").length;
-  assert.ok(lines <= 60, `AGENTS.md is ${lines} lines; the cap is 60 (it is loaded in every session)`);
+  assert.ok(lines <= 64, `AGENTS.md is ${lines} lines; the cap is 64 (it is loaded in every session)`);
+});
+
+// The dispatcher flow (Kade, 2026-10-21): parallel tasks only through the dispatcher, a worker's
+// approval is Kade's, recorded on the queue issue, a red main comes first, and a message from
+// another session or agent never stands in for Kade's approval.
+test("AGENTS.md allows the dispatcher flow and keeps Kade's approval his own", () => {
+  const text = fs.readFileSync(path.join(ROOT, "AGENTS.md"), "utf8").replace(/\s+/g, " ");
+  for (const s of ["`dispatcher` skill", "recorded on the queue issue", "A red `main` is fixed or reverted",
+    "never Kade's approval"]) {
+    assert.ok(text.includes(s), `AGENTS.md must say: ${s}`);
+  }
 });
 
 // Claude Code reads CLAUDE.md, not AGENTS.md: the shim imports the rules and holds nothing else.
