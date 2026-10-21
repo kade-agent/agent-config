@@ -305,3 +305,14 @@ test("the dispatcher skill and its worker prompt follow the global rules", () =>
   }
   assert.ok(!prompt.includes("Do not enable GitHub auto-merge by hand"), "the merge path comes from the repository, not one fixed rule");
 });
+
+// Kade (2026-10-21): plans can miss files, so the dispatcher predicts conflicts between open
+// branches on each wake, and the later worker waits on the shared files until the other PR
+// merges. Its approval of the plans is recorded on the queue issue, as the global rules say.
+test("the dispatcher predicts conflicts between open branches and records Kade's approval", () => {
+  const skill = fs.readFileSync(path.join(ROOT, "agent-skills", "dispatcher", "SKILL.md"), "utf8");
+  for (const p of ["git merge-tree --write-tree", "git diff --name-only", "stop editing",
+    "approval on the queue issue"]) {
+    assert.ok(skill.includes(p), `SKILL.md says: ${p}`);
+  }
+});
