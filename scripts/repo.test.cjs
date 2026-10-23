@@ -276,6 +276,27 @@ test("release-flow lets CI push the candidate branch, and an agent only when tha
   assert.ok(fs.existsSync(path.join(ROOT, ".github", "workflows", "auto-candidate.yml")));
 });
 
+// Kade, 2026-10-23: a failed or refused Candidate keeps its candidate/ branch so he can run it
+// again; only a successful one (the rc tag and prerelease made) deletes it.
+test("candidate.yml deletes the candidate branch only after the tag job succeeded", () => {
+  const text = fs.readFileSync(path.join(ROOT, ".github", "workflows", "candidate.yml"), "utf8");
+  const job = /^  cleanup:\n([^]*?)(?=\n  \S|$)/m.exec(text);
+  assert.ok(job, "candidate.yml has a cleanup job");
+  assert.match(job[1], /name: delete the candidate branch/, "the job keeps the name the release script lists");
+  const cond = /^    if: (.*)$/m.exec(job[1]);
+  assert.ok(cond, "the cleanup job has an if");
+  assert.match(cond[1], /needs\.tag\.result == 'success'/, "it runs only when the tag job succeeded");
+  assert.ok(!cond[1].includes("always()"), "it does not run whatever happens");
+  assert.doesNotMatch(text, /Whatever happens, the last job deletes/, "the header does not say it is deleted whatever happens");
+});
+
+test("release-flow says a failed Candidate keeps its branch", () => {
+  const skill = fs.readFileSync(path.join(ROOT, "agent-skills", "release-flow", "SKILL.md"), "utf8").replace(/\s+/g, " ");
+  assert.ok(!skill.includes("Whatever happens, it deletes"), "the skill no longer says the branch goes whatever happens");
+  assert.ok(skill.includes("a failed or refused Candidate keeps"), "the skill says a failed Candidate keeps the branch");
+  assert.ok(skill.includes("already a candidate"), "the skill names the half-made rc tag case");
+});
+
 // The dispatcher skill (Kade, 2026-10-21) runs a queue through sub sessions. A worker left waiting is
 // the failure it exists to prevent, so its worker prompt must keep the rules that stop it: subscribe
 // to the PR, push after every commit, check mergeability itself, and report DONE or BLOCKED.
