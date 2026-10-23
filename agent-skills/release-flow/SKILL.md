@@ -1,6 +1,6 @@
 ---
 name: release-flow
-description: How every release is made in Kade's repositories - a version PR into main, a candidate/SHA branch the agent pushes at that main commit, Kade's Candidate run (an -rc.N tag, a prerelease and an rc/ branch named after that tag), then his Promote run on that rc/ branch, which tags the same commit and releases it without a rebuild. Use whenever Kade asks for a release, a release candidate, a version bump or a tag, and before touching candidate/ or rc/ branches, release workflows or release checks in any repository.
+description: How every release is made in Kade's repositories - a version PR into main, a candidate/SHA branch at that main commit, pushed by CI (auto-candidate) or else by the agent, Kade's Candidate run (an -rc.N tag, a prerelease and an rc/ branch named after that tag), then his Promote run on that rc/ branch, which tags the same commit and releases it without a rebuild. Use whenever Kade asks for a release, a release candidate, a version bump or a tag, and before touching candidate/ or rc/ branches, release workflows or release checks in any repository.
 ---
 
 # Release flow
@@ -10,7 +10,7 @@ version and release notes live, never the flow itself. The design and its reason
 `kade-agent/agent-config` `docs/release-flow-plan.md`.
 
 ```
-main --(1) version PR--> main --(2) agent: candidate/<12-character sha> at that main commit
+main --(1) version PR--> main --(2) CI, else agent: candidate/<12-character sha> at that commit
      --(3) Kade: Actions > Candidate on it --> tag v<version>-rc.N + prerelease + branch rc/<rc tag>
      --(4) Kade tries it, then Actions > Promote on rc/<rc tag> --> tag v<version> + release
 ```
@@ -24,20 +24,28 @@ main --(1) version PR--> main --(2) agent: candidate/<12-character sha> at that 
 - A repository whose release tag is computed rather than written (agent-config: `vYYYY.MM.DD`)
   skips this step.
 
-## 2. The candidate branch (the agent pushes it)
+## 2. The candidate branch (CI pushes it; the agent only when that fails)
 
-- The one branch an agent pushes outside `claude/<task>` (or `agent/<task>`), and never pushed
-  to again: `candidate/<12-character sha>`, at a commit already on `main`, with no commit of its own.
-- After step 1 has merged: `git fetch origin main`; on the merge commit every check run has
-  finished and none failed. Then
-  `git push origin <sha>:refs/heads/candidate/<first 12 characters of sha>`.
-- Wait for the **Candidate guard** run on that push (`candidate-guard.yml`) to pass; it deletes
-  a branch with a wrong name, a commit not on `main`, or a second push.
+- `candidate/<12-character sha>`, at a commit already on `main`, with no commit of its own, and
+  never pushed to again.
+- **Where the repository has `auto-candidate.yml`**, CI pushes it: once `test` passes on a push to
+  `main` that has something to release (agent-config: a file deployed to `~/.claude` changed since
+  the latest release; elsewhere: the version file changed), its run creates the branch at that
+  commit and deletes an unused older `candidate/*` branch. After step 1 has merged, read that
+  run: if it passed, the branch exists; go on to telling Kade. Push by hand only when that run
+  failed (its error says why: Candidate was running, or the API refused the push).
+- **By hand** (that failure, or a repository without `auto-candidate.yml`): the one branch an
+  agent pushes outside `claude/<task>` (or `agent/<task>`). `git fetch origin main`; on the
+  commit every check run has finished and none failed. Then
+  `git push origin <sha>:refs/heads/candidate/<first 12 characters of sha>`, and wait for the
+  **Candidate guard** run on that push (`candidate-guard.yml`) to pass; it deletes a branch with
+  a wrong name, a commit not on `main`, or a second push. If the push is refused, report it to
+  Kade with the command; never retry it in a loop.
 - Tell Kade: "Actions > Candidate > Run workflow > branch `candidate/<sha>`", with the version,
   what `main` brings since the last release (`git log --no-merges <latest v tag>..<sha>`, grouped
   by PR with links), the `NOT VERIFIED` lines of those commits, and what to try on the prerelease.
-- One candidate branch at a time. A cloud session cannot delete a branch: one left behind by
-  mistake is Kade's to delete.
+- One candidate branch at a time. A cloud session cannot delete a branch: one it left behind by
+  mistake is Kade's to delete (or goes when `auto-candidate.yml` next pushes one).
 
 ## 3. Kade: Candidate
 
@@ -76,6 +84,9 @@ Moving a repository onto it is its own task (plan first). The pieces, as in agen
   `GITHUB_TOKEN`; a last job (`if: always()`) deletes the `candidate/` branch.
 - **`promote.yml`** (`workflow_dispatch`): the checks of step 4, the assets downloaded and checked
   against `SHA256SUMS`, the final tag on the same commit, the release, the `rc/` branches deleted.
+- **`auto-candidate.yml`** on `workflow_run` of `test` on `main`: when the push has something to
+  release, creates the `candidate/` branch with `GITHUB_TOKEN` (deleting an unused older one);
+  its jobs are left out of Candidate's check of the commit's checks.
 - **`candidate-guard.yml`** on push to `candidate/**` and `rc/**`. No new rulesets; a `v*` tag
   ruleset stays where one exists.
 - No `rc` branch (git cannot hold `rc` beside `rc/…`), no `release-checks.yml`, no release ruleset
