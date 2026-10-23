@@ -53,7 +53,10 @@ main --(1) version PR--> main --(2) CI, else agent: candidate/<12-character sha>
   no other `candidate/*` branch exists, the branch has not moved and the version is new. It
   builds and tests once, tags `v<version>-rc.N`, makes a prerelease with the assets, makes the
   branch `rc/<rc tag>` at the tag's commit, and deletes the same version's lower `rc/` branches.
-  Whatever happens, it deletes the `candidate/` branch.
+  Only a successful run deletes the `candidate/` branch: a failed or refused Candidate keeps it,
+  so Kade can run Candidate again on it (`auto-candidate.yml` deletes it when `main` gets a newer
+  candidate). A re-run after a failure that already made the rc tag is refused ("already a
+  candidate"); that case needs the half-made tag removed by Kade.
 - When he asks, read the run and record the result on the issue. A failed run is fixed on `main`
   and starts again at step 2; one refused only because `main`'s checks had not finished may be
   pushed again at the same commit.
@@ -81,7 +84,7 @@ Moving a repository onto it is its own task (plan first). The pieces, as in agen
 
 - **`candidate.yml`** (`workflow_dispatch`): the checks of step 3, the repository's build and
   tests, `SHA256SUMS`, the rc tag, the prerelease and the `rc/` branch, all made with
-  `GITHUB_TOKEN`; a last job (`if: always()`) deletes the `candidate/` branch.
+  `GITHUB_TOKEN`; a last job (`if: needs.<tag job>.result == 'success'`) deletes the `candidate/` branch.
 - **`promote.yml`** (`workflow_dispatch`): the checks of step 4, the assets downloaded and checked
   against `SHA256SUMS`, the final tag on the same commit, the release, the `rc/` branches deleted.
 - **`auto-candidate.yml`** on `workflow_run` of `test` on `main`: when the push has something to
