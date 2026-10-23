@@ -81,7 +81,8 @@ main --(1) version PR--> main
    `main`'s CI is green on the merge commit, and pushes a branch at that commit, adding no commit
    of its own: `git push origin <sha>:refs/heads/candidate/<12-character sha>`. It waits for the
    guard's run on that push to pass, then tells Kade: "Actions > Candidate > Run workflow >
-   branch `candidate/<12-character sha>`".
+   branch `candidate/<12-character sha>`". Where the repository has `auto-candidate.yml`, CI
+   pushes the branch instead and the agent pushes it only when that run failed (section 4a).
 3. **Candidate** (`candidate.yml`, `workflow_dispatch`). It refuses unless:
    - it runs on `refs/heads/candidate/<12-character sha>`, and the sha is the commit's;
    - the commit is on `origin/main`, and its checks passed: at least one check run, every
@@ -146,6 +147,26 @@ No rulesets (decision 6). Two workflows keep the branch as it was created:
   someone else's and is reported.
 - **Left-overs:** if a runner dies before the last job, the branch stays; the next Candidate
   refuses, and the daily report lists `candidate/*` branches older than a day (section 6, step 6).
+
+## 4a. Auto-candidate (Kade, 2026-10-23)
+
+Agents' pushes of `candidate/*` from cloud sessions were often refused, so Kade had to ask for
+each one again. **`auto-candidate.yml`** pushes the branch instead:
+
+- It runs on `workflow_run` of `test`, completed with success on a push to `main`.
+- Job *decide on a candidate* (`contents: read`) checks out that commit and runs
+  `release.cjs should-candidate`: the files `deploy-exclude` lets into `~/.claude` changed since
+  the merge base with the latest release tag (the `main` commit it was stamped on). None: no
+  candidate. A repository with a version file decides on "the version file changed" instead.
+- Job *push the candidate branch* (`contents: write`, `actions: read`, no checkout): nothing if
+  `main` has moved on (the newer commit's run decides); fails if Candidate is running or queued,
+  so it never deletes the branch Candidate reads; deletes an unused `candidate/*` branch at an
+  older commit (Kade's choice: the newest `main` is the candidate); creates
+  `candidate/<12-character sha>` with `GITHUB_TOKEN`; writes the Candidate line in its summary.
+- It fails only when it could not push. That is the one case where an agent pushes by hand.
+- `GITHUB_TOKEN` starts no workflow, so the guard does not run on this branch; Candidate checks
+  the same things again. Both jobs are in `CANDIDATE_JOBS`, so a failed run does not make
+  Candidate refuse the commit's checks.
 
 ## 5. agent-config
 
