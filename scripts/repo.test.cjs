@@ -266,6 +266,16 @@ test("release-flow describes Candidate and Promote, and the candidate branch an 
   assert.ok(skill.includes("outside `claude/<task>`"), "the skill names it as the exception to the Branches rule");
 });
 
+// Auto-candidate (Kade, 2026-10-23): agents' pushes of candidate/ were often refused, so CI pushes
+// the branch where a repository has auto-candidate.yml, and an agent pushes it by hand only when
+// that run failed.
+test("release-flow lets CI push the candidate branch, and an agent only when that run failed", () => {
+  const skill = fs.readFileSync(path.join(ROOT, "agent-skills", "release-flow", "SKILL.md"), "utf8").replace(/\s+/g, " ");
+  assert.ok(skill.includes("auto-candidate.yml"), "the skill names auto-candidate.yml");
+  assert.ok(skill.includes("only when that run failed"), "the agent pushes by hand only when the run failed");
+  assert.ok(fs.existsSync(path.join(ROOT, ".github", "workflows", "auto-candidate.yml")));
+});
+
 // The dispatcher skill (Kade, 2026-10-21) runs a queue through sub sessions. A worker left waiting is
 // the failure it exists to prevent, so its worker prompt must keep the rules that stop it: subscribe
 // to the PR, push after every commit, check mergeability itself, and report DONE or BLOCKED.

@@ -22,11 +22,15 @@
 //                     commit for Promote to run from (the GitHub app lists no tags)
 //   superseded R      origin's rc branches of R's version below R, space-separated
 //   released T        origin's rc branches of version T and every older one, space-separated
+//   should-candidate  the files deploy-exclude lets into ~/.claude that HEAD changed since the main
+//                     commit of the latest release, one per line; nothing means no candidate
+//                     (auto-candidate.yml)
 //
 // Tests for this file set RELEASE_DATE.
 "use strict";
 
 const fs = require("fs");
+const path = require("path");
 const { execFileSync } = require("child_process");
 const { compareVersions, latestRelease } = require("../hooks/global-sync.cjs");
 
@@ -50,6 +54,8 @@ const CANDIDATE_JOBS = new Set([
   "rc tag and prerelease",
   "delete the candidate branch",
   "candidate branch unchanged",
+  "decide on a candidate",
+  "push the candidate branch",
 ]);
 const FAILED = new Set(["failure", "timed_out", "cancelled", "action_required", "stale", "startup_failure"]);
 
@@ -128,6 +134,47 @@ function checkPromote(rc, tags, stampLine) {
   return final;
 }
 
+// deploy-exclude is a git exclude file: last matching pattern wins, and nothing under an excluded
+// directory comes back. Enough of gitignore for its own patterns: !, a trailing /, * and **.
+function excludePatterns(text) {
+  return text
+    .split("\n")
+    .map((l) => l.trim())
+    .filter((l) => l && !l.startsWith("#"))
+    .map((l) => {
+      const negate = l.startsWith("!");
+      let p = negate ? l.slice(1) : l;
+      const dirOnly = p.endsWith("/");
+      if (dirOnly) p = p.slice(0, -1);
+      const anchored = p.includes("/");
+      const re = p
+        .split(/(\*\*|\*|\?)/)
+        .map((t) => (t === "**" ? ".*" : t === "*" ? "[^/]*" : t === "?" ? "[^/]" : t.replace(/[.+^${}()|[\]\\]/g, "\\$&")))
+        .join("");
+      return { negate, dirOnly, anchored, re: new RegExp(`^${re}$`) };
+    });
+}
+
+function excluded(patterns, p, isDir) {
+  let out = false;
+  for (const x of patterns) {
+    if (x.dirOnly && !isDir) continue;
+    if (x.re.test(x.anchored ? p : p.split("/").pop())) out = !x.negate;
+  }
+  return out;
+}
+
+function deployedPaths(files, excludeText) {
+  const patterns = excludePatterns(excludeText);
+  return files.filter((f) => {
+    const parts = f.split("/");
+    for (let i = 1; i < parts.length; i++) {
+      if (excluded(patterns, parts.slice(0, i).join("/"), true)) return false;
+    }
+    return !excluded(patterns, f, false);
+  });
+}
+
 function setStamp(text, tag) {
   const line = `Global rules: ${tag}`;
   return /^Global rules: /.test(text) ? text.replace(/^[^\n]*/, line) : `${line}\n\n${text}`;
@@ -191,6 +238,16 @@ function checkCandidateHere(branch) {
   checkCandidate(branch, head, onMain, others);
 }
 
+// A release tag is a stamped commit whose parent is on main; the merge base is that main commit.
+function shouldCandidate() {
+  const latest = latestRelease(releaseTags());
+  const files = latest
+    ? git("diff", "--name-only", git("merge-base", latest, "HEAD"), "HEAD")
+    : git("ls-files");
+  const exclude = fs.readFileSync(path.join(__dirname, "..", "deploy-exclude"), "utf8");
+  return deployedPaths(files.split("\n").filter(Boolean), exclude);
+}
+
 if (require.main === module) {
   const [cmd, ...rest] = process.argv.slice(2);
   try {
@@ -209,8 +266,11 @@ if (require.main === module) {
     else if (cmd === "released") {
       if (!rest[0] || latestRelease([rest[0]]) !== rest[0]) throw new Error(`${rest[0] || "(none)"} is not a release tag`);
       console.log(releasedBranches(originBranches("rc/*"), rest[0]).join(" "));
+    } else if (cmd === "should-candidate") {
+      const files = shouldCandidate();
+      if (files.length) console.log(files.join("\n"));
     } else {
-      throw new Error("usage: release.cjs next | rc <tag> | stamp <tag> | latest | check-candidate <branch> | checks-passed <run id> | check-promote <rc tag> | rc-branch <branch> | superseded <rc tag> | released <tag>");
+      throw new Error("usage: release.cjs next | rc <tag> | stamp <tag> | latest | check-candidate <branch> | checks-passed <run id> | check-promote <rc tag> | rc-branch <branch> | superseded <rc tag> | released <tag> | should-candidate");
     }
   } catch (e) {
     console.error(`release: ${e.message}`);
@@ -218,4 +278,4 @@ if (require.main === module) {
   }
 }
 
-module.exports = { nextTag, setStamp, rcTag, checkCandidate, checksPassed, checkPromote, CANDIDATE_JOBS, rcOfBranch, supersededBranches, releasedBranches };
+module.exports = { nextTag, setStamp, rcTag, checkCandidate, checksPassed, checkPromote, CANDIDATE_JOBS, rcOfBranch, supersededBranches, releasedBranches, deployedPaths };
