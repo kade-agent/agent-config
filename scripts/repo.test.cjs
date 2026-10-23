@@ -280,7 +280,7 @@ test("release-flow lets CI push the candidate branch, and an agent only when tha
 // again; only a successful one (the rc tag and prerelease made) deletes it.
 test("candidate.yml deletes the candidate branch only after the tag job succeeded", () => {
   const text = fs.readFileSync(path.join(ROOT, ".github", "workflows", "candidate.yml"), "utf8");
-  const job = /^  cleanup:\n([^]*?)(?=\n  \S|$)/m.exec(text);
+  const job = /\n  cleanup:\n([^]*?)(?=\n  \S|$(?![^]))/.exec(text);
   assert.ok(job, "candidate.yml has a cleanup job");
   assert.match(job[1], /name: delete the candidate branch/, "the job keeps the name the release script lists");
   const cond = /^    if: (.*)$/m.exec(job[1]);

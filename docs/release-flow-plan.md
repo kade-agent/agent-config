@@ -12,8 +12,9 @@
      `-rc.N` tag and a prerelease; the final release is promoted from it, not rebuilt.
   2. Kade does not type a SHA. The agent pushes a branch at the proposed commit and Kade runs
      **Candidate** on that branch from the Actions dropdown.
-  3. Once created, nobody pushes to or merges into that branch. Candidate deletes it when it
-     finishes, whether the candidate was made or the run failed.
+  3. Once created, nobody pushes to or merges into that branch. Candidate deletes it when the
+     candidate was made; a failed or refused run keeps it, so Kade can run Candidate again on it
+     (Kade, 2026-10-23).
   4. The four adjustments of section 3 (the commit is on `main`; the branch kept immutable;
      deletion in a job that always runs; Promote run from the rc tag).
   5. A cloud session may push `candidate/*` (Kade, answering open question 1).
@@ -98,10 +99,12 @@ main --(1) version PR--> main
    than that version's highest rc tag) and a GitHub prerelease with the assets and a
    `SHA256SUMS` file, then the branch `rc/v<version>-rc.N` at the tag's commit, and
    deletes that version's lower rc branches (only the highest rc can be promoted). A last job,
-   `if: always()`, deletes the `candidate/<sha>` branch: after a candidate, a failure, or a
-   cancel. A failed candidate is never re-run; it is fixed on `main` and starts again at step 2
-   (a candidate refused only because `main`'s CI had not finished may be pushed again at the
-   same commit).
+   `if: needs.tag.result == 'success'`, deletes the `candidate/<sha>` branch only after the rc
+   tag and prerelease were made. A failed or refused run keeps the branch, and Kade can run
+   Candidate again on it (a failure that already made the rc tag is refused as "already a
+   candidate" until Kade removes the half-made tag). A failure caused by `main` is fixed there
+   and starts again at step 2; `auto-candidate.yml` deletes the kept branch when `main` gets a
+   newer candidate.
 4. **Promote** (`promote.yml`, `workflow_dispatch`). Kade runs it on the branch
    `rc/v<version>-rc.N`, so the workflow is read from the candidate's commit. The tag is
    the record and the branch a handle: Promote refuses unless the branch head is the rc tag's

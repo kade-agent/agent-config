@@ -9,9 +9,9 @@
 #     and makes a GitHub prerelease. global-sync ignores rc tags, so no session moves to it,
 #   - makes the branch rc/<rc tag> at that commit, for Promote (promote.yml) to run from (the
 #     GitHub app lists branches only), and deletes the same version's lower rc branches.
-# Whatever happens, the last job deletes the candidate/<sha> branch; a failed candidate is fixed
-# on main and starts again with a new branch. Only the tag and cleanup jobs can write, and they run none of
-# the repository's code; the tag job refuses unless the blob and tree it creates are the ones
+# A successful run deletes the candidate/<sha> branch; a failed or refused one keeps it, so
+# Candidate can run again on it; auto-candidate deletes it when main gets a newer candidate, or
+# Kade does. Only the tag and cleanup jobs can write, and they run none of the repository's code; the tag job refuses unless the blob and tree it creates are the ones
 # the check job tested.
 name: Candidate
 
@@ -166,13 +166,13 @@ jobs:
   cleanup:
     name: delete the candidate branch
     needs: [check, tag]
-    if: always() && startsWith(github.ref, 'refs/heads/candidate/')
+    if: needs.tag.result == 'success' && startsWith(github.ref, 'refs/heads/candidate/')
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
       contents: write  # deleting the branch
     steps:
-      - name: Delete the branch, whatever the result
+      - name: Delete the branch, the candidate being made
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
