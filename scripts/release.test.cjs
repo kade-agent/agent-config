@@ -207,7 +207,7 @@ test("checksPassed leaves out the candidate workflows' own jobs from any run", (
 });
 
 test("the job names checksPassed leaves out are the candidate workflows' jobs", () => {
-  const text = ["candidate.yml", "candidate-guard.yml"]
+  const text = ["candidate.yml", "candidate-guard.yml", "auto-candidate.yml"]
     .map((f) => fs.readFileSync(path.join(__dirname, "..", ".github", "workflows", f), "utf8"))
     .join("\n");
   const names = [...text.matchAll(/^ {4}name: (.+)$/gm)].map((m) => m[1]);
@@ -245,4 +245,42 @@ test("rc-branch, superseded and released read origin's rc/ branches; check-candi
   assert.strictEqual(release(dev, "released", "v2026.10.12").trim(), "rc/v2026.10.09.3-rc.1 rc/v2026.10.12-rc.1");
   const short = git(dev, "rev-parse", "HEAD").slice(0, 12);
   assert.doesNotThrow(() => release(dev, "check-candidate", `candidate/${short}`));
+});
+
+// Auto-candidate (docs/release-flow-plan.md, section 4a): after test passes on main, CI pushes the
+// candidate branch when main has a file deployed to ~/.claude that the latest release has not.
+test("deployedPaths keeps the files deploy-exclude lets into ~/.claude", () => {
+  const exclude = fs.readFileSync(path.join(__dirname, "..", "deploy-exclude"), "utf8");
+  const files = [
+    "AGENTS.md", "CLAUDE.md", "settings.global.json", "agents.json", ".gitattributes",
+    "hooks/global-sync.cjs", "rules/x.md", "agent-skills/release-flow/SKILL.md",
+    "rules/local-pc.md", "README.md", "docs/release-flow-plan.md", "scripts/release.cjs",
+    ".github/workflows/test.yml", ".claude/CLAUDE.md", "setup/local-setup.sh", "deploy-exclude",
+  ];
+  assert.deepStrictEqual(r.deployedPaths(files, exclude), files.slice(0, 8));
+});
+
+test("should-candidate prints the deployed files changed since the latest release, nothing else", () => {
+  const { dev } = released();
+  assert.strictEqual(release(dev, "should-candidate"), "");
+  fs.mkdirSync(path.join(dev, "docs"));
+  fs.writeFileSync(path.join(dev, "docs", "plan.md"), "plan\n");
+  git(dev, "add", "-A");
+  git(dev, "commit", "-q", "-m", "docs");
+  assert.strictEqual(release(dev, "should-candidate"), "");
+  fs.writeFileSync(path.join(dev, "CLAUDE.md"), "@AGENTS.md\n\n");
+  git(dev, "commit", "-q", "-am", "rules");
+  assert.strictEqual(release(dev, "should-candidate"), "CLAUDE.md\n");
+});
+
+// A release tag is a stamped commit whose parent is on main: its AGENTS.md line 1 differs from
+// main's, which is not a change to release.
+test("should-candidate compares main with the main commit the latest release was stamped on", () => {
+  const { dev } = released();
+  const base = git(dev, "rev-parse", "HEAD");
+  fs.writeFileSync(path.join(dev, "AGENTS.md"), "Global rules: v2026.10.12\n\nA rule.\n");
+  git(dev, "commit", "-q", "-am", "stamp");
+  git(dev, "tag", "v2026.10.12");
+  git(dev, "checkout", "-q", base);
+  assert.strictEqual(release(dev, "should-candidate"), "");
 });
