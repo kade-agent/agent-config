@@ -50,8 +50,9 @@ curl -fsSL -o "$d/watch.sh" https://raw.githubusercontent.com/kade-agent/event-b
 
 Then run `bash "$HOME/.claude/dispatcher/watch.sh"` as the `Monitor` command. Each line it prints
 is one event, or `BROKER-DOWN <why>` just before it exits. It loops on
-`consumer next GITHUB dispatcher`, one message per call with a 60 s wait. A quiet minute is not
-an outage; two failures in a row are.
+`consumer next GITHUB dispatcher`, one message per call, each pull ending after a 60 s `--timeout`
+(never `--wait`, which delays every ack; event-broker#5). A quiet minute is not an outage; two
+failures in a row are.
 
 - **Resume.** `dispatcher` is a durable consumer, so the server remembers what was acked, and
   the next arm continues after it. There is no state file. An event that was pulled but never

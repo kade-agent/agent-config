@@ -139,9 +139,11 @@ What this cannot see, and what covers it:
 - **The stream:** `GITHUB`, file storage, subjects `github.>`, kept for 7 days, with a 2-minute
   duplicate window keyed by the delivery GUID.
 - **The consumer:** a durable consumer named `dispatcher`, with explicit acks, new messages only
-  and a 60 s ack wait. The Monitor reads it with `nats consumer next GITHUB dispatcher`, one
-  message per call, and the CLI acks each message as it reads it. When a Monitor ends (30
-  minutes at most), the next one resumes after the last ack.
+  and a 60 s ack wait. The Monitor reads it with
+  `nats consumer next GITHUB dispatcher --raw --count 1 --timeout 60s`, one message per call, and
+  the CLI acks each message as it reads it. Never `--wait`: natscli 0.5.0 sleeps a random 0 to D
+  before the ack (event-broker #5). When a Monitor ends (30 minutes at most), the next one
+  resumes after the last ack.
 - **Single instance:** the dispatcher's pidfile guard stays, so only the newest watch runs.
 - **Backstop:** on every re-arm, the dispatcher runs one gh sweep of its open PRs. This catches
   deliveries lost while the NAS was down.
@@ -181,6 +183,7 @@ What this cannot see, and what covers it:
 | `docker compose run --rm setup`: both NKeys, secrets, `.env`, file owners | event-broker #3 | merged 2026-10-24 |
 | `client/watch.sh` (the cloud seed written at run time) and `client/install-nats.sh` (natscli 0.5.0, pinned) | event-broker #4 | merged 2026-10-24 |
 | `pr-watch.md` runs `client/watch.sh` at a pinned event-broker commit | agent-config, `claude/pr-watch-client-script` | open |
+| `--timeout 60s`, no `--wait` (event-broker #5) | agent-config #121 | open |
 | The cloud websocket route and the cloud environment (variables, network, setup script) | Kade | next |
 
 **Settled:**
@@ -191,7 +194,8 @@ What this cannot see, and what covers it:
   refused on the wrong connection type.
 - **The LAN path works end to end** (Kade, 2026-10-24). The App's ping got a 200 over the NAS
   domain. A real stella-rain/app `workflow_run` reached JetStream, and the PC read it with
-  `nats consumer next GITHUB dispatcher --raw --count 1 --wait 120s`, with no key.
+  `nats consumer next GITHUB dispatcher --raw --count 1 --wait 120s`, with no key. That `--wait`
+  only delayed the ack (event-broker #5); the equivalent read is `--timeout 120s`.
 - Deploy lessons:
   - The certificate is a one-level wildcard, so every public hostname is one level deep.
   - The secret files must be owned by uid 1000, the container's `node` user.
@@ -210,3 +214,4 @@ What this cannot see, and what covers it:
 - NOT VERIFIED: the cloud websocket route, and a cloud session reaching it through the sandbox's
   proxy.
 - NOT VERIFIED: a `mergeable` event from a real push to `main`.
+- NOT VERIFIED: a watch drains a backlog in seconds (event-broker #5 step 4), after EB5-fix.
