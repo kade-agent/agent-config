@@ -133,7 +133,7 @@ away, before anything else in the wake routine:
 | `issues` `labeled` by someone else | Nothing to the worker. Note it; act on an approval or a block. |
 | `issues` `reopened` | Nothing to the worker. Tell Kade. |
 | `issue_comment` `created` on a sub-issue, from the workers' account | Nothing to the worker. Read it with `gh issue view`; act only on a strict DONE or BLOCKED line or a lease. |
-| `pr.<n>.issue_comment` on a task's PR | Read it on the PR with gh, then act as for a review ask. |
+| `pr.<n>.issue_comment` on a task's PR | Read it on the PR with gh. If it asks the worker for something, tell the worker (worker prompt rule 9). |
 | `converted_to_draft` or `auto_merge_disabled` by someone else | Nothing to the worker. Tell Kade if the task's merge path changed. |
 
 A `mergeable` `clean`, a green check or a `push` to `main` needs no worker message. After a push

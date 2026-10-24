@@ -389,5 +389,9 @@ test("the dispatcher runs lanes of sub-issues in <owner>/tasks with plans as fil
     assert.ok(plan.includes(h), `the plan template has the worker-prompt slot ${h}`);
   }
   const watch = fs.readFileSync(path.join(dir, "references", "pr-watch.md"), "utf8").replace(/\s+/g, " ");
-  assert.ok(watch.includes("poll the lanes' sub-issues"), "pr-watch.md polls the sub-issues until the broker sends issue events");
+  for (const p of ["github.<owner>.<repo>.issue.<n>.<event>", "`issue_comment`", "`timed_out`", "`action_required`",
+    "`cancelled` and `stale` are not failures", "sweep the lanes' sub-issues", "gh issue view <n> -R <owner>/tasks --comments"]) {
+    assert.ok(watch.includes(p), `pr-watch.md says: ${p}`);
+  }
+  assert.ok(!watch.includes("not issue events yet"), "pr-watch.md no longer says the broker lacks issue events");
 });
