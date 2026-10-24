@@ -253,7 +253,7 @@ There is no keyless LAN user: `no_auth_user` is removed, and a local dispatcher 
 | EB8-allow: the receiver's `ALLOWED_OWNERS` allowlist | event-broker | open |
 | EB8-accounts: accounts, per-org streams, keys and filtered consumers in `nats-server.conf` and the setup | event-broker | open |
 | EB8-watch: the dispatcher's watch uses its org's `reader-<owner>` key | agent-config | open |
-| pr-watch, worker-prompt and this section on the 2026-10-25 live checks (EB10-docs) | agent-config #PR | open |
+| pr-watch, worker-prompt and this section on the 2026-10-25 live checks (EB10-docs) | agent-config #127 | open |
 | New keys and redeploy | Kade | open |
 | The App: Issues read, `issues` and `issue_comment` subscriptions, installed on each `<owner>/tasks`; receiver redeploy | Kade | next |
 | The cloud websocket route and the cloud environment (variables, network, setup script) | Kade | next |
