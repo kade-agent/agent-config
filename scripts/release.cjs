@@ -11,8 +11,8 @@
 //   rc T              the next candidate tag of the final tag T: T-rc.1, T-rc.2, ...
 //   stamp T           writes "Global rules: T" into line 1 of AGENTS.md in the working tree
 //   latest            the highest release tag, or nothing
-//   check-candidate B refuses unless B is candidate/<12-character sha of HEAD>, HEAD is on
-//                     origin/main and origin has no other candidate/* branch
+//   check-main REF    refuses unless REF is refs/heads/main: a candidate is made from main only
+//   check-changes     should-candidate, refusing with "nothing to release" when it prints no file
 //   checks-passed ID  reads a commit's check runs (the API's JSON) on stdin; refuses unless one
 //                     ran, all finished and none failed, leaving out run ID's own jobs and the
 //                     candidate workflows' jobs from any run
@@ -24,7 +24,7 @@
 //   released T        origin's rc branches of version T and every older one, space-separated
 //   should-candidate  the files deploy-exclude lets into ~/.claude that HEAD changed since the main
 //                     commit of the latest release, one per line; nothing means no candidate
-//                     (auto-candidate.yml)
+//                     (check-changes, in Candidate)
 //
 // Tests for this file set RELEASE_DATE.
 "use strict";
@@ -52,10 +52,7 @@ const CANDIDATE = /^(v\d+(?:\.\d+)*)-rc\.(\d+)$/;
 const CANDIDATE_JOBS = new Set([
   "check, stamp and test",
   "rc tag and prerelease",
-  "delete the candidate branch",
-  "candidate branch unchanged",
-  "decide on a candidate",
-  "push the candidate branch",
+  "rc branch unchanged",
 ]);
 const FAILED = new Set(["failure", "timed_out", "cancelled", "action_required", "stale", "startup_failure"]);
 
@@ -99,12 +96,8 @@ function releasedBranches(branches, final) {
     .map(([b]) => b);
 }
 
-function checkCandidate(branch, head, onMain, others) {
-  const m = /^candidate\/([0-9a-f]{12})$/.exec(branch);
-  if (!m) throw new Error(`${branch} is not candidate/<12-character sha>`);
-  if (!head.startsWith(m[1])) throw new Error(`${branch} names ${m[1]}, not HEAD ${head}`);
-  if (!onMain) throw new Error(`${head} is not on origin/main`);
-  if (others.length) throw new Error(`${others.join(", ")} is left over; Kade deletes it first`);
+function checkMain(ref) {
+  if (ref !== "refs/heads/main") throw new Error(`a candidate is made from refs/heads/main only; this run is on ${ref || "(none)"}`);
 }
 
 function checksPassed(runs, runId) {
@@ -226,18 +219,6 @@ function originBranches(pattern) {
     .map((line) => line.split("refs/heads/")[1]);
 }
 
-function checkCandidateHere(branch) {
-  const head = git("rev-parse", "HEAD");
-  let onMain = true;
-  try {
-    git("merge-base", "--is-ancestor", head, "origin/main");
-  } catch {
-    onMain = false;
-  }
-  const others = originBranches("candidate/*").filter((b) => b !== branch);
-  checkCandidate(branch, head, onMain, others);
-}
-
 // A release tag is a stamped commit whose parent is on main; the merge base is that main commit.
 function shouldCandidate() {
   const latest = latestRelease(releaseTags());
@@ -248,6 +229,12 @@ function shouldCandidate() {
   return deployedPaths(files.split("\n").filter(Boolean), exclude);
 }
 
+function changesToRelease() {
+  const files = shouldCandidate();
+  if (!files.length) throw new Error("nothing to release: no file deployed to ~/.claude changed since the latest release");
+  return files;
+}
+
 if (require.main === module) {
   const [cmd, ...rest] = process.argv.slice(2);
   try {
@@ -256,7 +243,8 @@ if (require.main === module) {
     else if (cmd === "rc") console.log(rcTag(rest[0], releaseTags()));
     else if (cmd === "stamp") stamp(rest[0]);
     else if (cmd === "latest") console.log(latestRelease(releaseTags()) || "");
-    else if (cmd === "check-candidate") checkCandidateHere(rest[0] || "");
+    else if (cmd === "check-main") checkMain(rest[0] || "");
+    else if (cmd === "check-changes") console.log(changesToRelease().join("\n"));
     else if (cmd === "checks-passed") checksPassed(JSON.parse(fs.readFileSync(0, "utf8")).check_runs || [], rest[0]);
     else if (cmd === "check-promote") {
       const line = git("show", `${rest[0]}^{commit}:AGENTS.md`).split("\n")[0];
@@ -270,7 +258,7 @@ if (require.main === module) {
       const files = shouldCandidate();
       if (files.length) console.log(files.join("\n"));
     } else {
-      throw new Error("usage: release.cjs next | rc <tag> | stamp <tag> | latest | check-candidate <branch> | checks-passed <run id> | check-promote <rc tag> | rc-branch <branch> | superseded <rc tag> | released <tag> | should-candidate");
+      throw new Error("usage: release.cjs next | rc <tag> | stamp <tag> | latest | check-main <ref> | check-changes | checks-passed <run id> | check-promote <rc tag> | rc-branch <branch> | superseded <rc tag> | released <tag> | should-candidate");
     }
   } catch (e) {
     console.error(`release: ${e.message}`);
@@ -278,4 +266,4 @@ if (require.main === module) {
   }
 }
 
-module.exports = { nextTag, setStamp, rcTag, checkCandidate, checksPassed, checkPromote, CANDIDATE_JOBS, rcOfBranch, supersededBranches, releasedBranches, deployedPaths };
+module.exports = { nextTag, setStamp, rcTag, checkMain, checksPassed, checkPromote, CANDIDATE_JOBS, rcOfBranch, supersededBranches, releasedBranches, deployedPaths };

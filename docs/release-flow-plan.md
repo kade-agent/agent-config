@@ -344,6 +344,7 @@ pushes to `main` or opens a PR after every Promote; Kade chose neither (decision
    Candidate, `check-candidate` removed); `candidate.yml` on `main`; `auto-candidate.yml` and the
    `candidate/**` half of `candidate-guard.yml` removed; README; the `release-flow` skill and its
    tests in `repo.test.cjs`, so the skill never describes a flow that is not built yet.
+   **Done 2026-10-25** (`release.cjs check-main` and `check-changes`); the workflows are NOT VERIFIED until step 3.
 3. **First run** on agent-config: Candidate from `main` in the GitHub app, one refusal on a
    commit whose checks have not finished, then Promote.
 4. **code-quality-assurance:** the daily report no longer lists left-over `candidate/*` branches.

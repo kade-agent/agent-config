@@ -1,18 +1,20 @@
-# Candidate (docs/release-flow-plan.md, sections 3 to 5). An agent pushes candidate/<12-character
-# sha> at a commit on main, adding no commit; Kade runs this workflow on that branch. It
-#   - refuses unless the branch names HEAD, HEAD is on main, no other candidate branch is left over,
-#     the branch has not moved, and every check run on HEAD passed (scripts/release.cjs),
+# Candidate (docs/release-flow-plan.md, sections 3, 5 and 9). Kade runs this workflow on main itself
+# (Actions > Candidate > Run workflow; main is already selected). GITHUB_SHA is fixed when he
+# clicks, so a push to main during the run changes nothing. It
+#   - refuses unless it runs on refs/heads/main, a file deployed to ~/.claude changed since the
+#     latest release, and every check run on HEAD passed (scripts/release.cjs); a commit that is
+#     a candidate already is refused when the final tag is picked,
 #   - picks the final tag vYYYY.MM.DD from the UTC date (.2, .3 once that date is released) and the
 #     next candidate number, writes the final tag into line 1 of AGENTS.md and runs every test on
 #     that tree,
+#   - lists what main brings since the latest release in the run summary and the prerelease,
 #   - creates one commit with that stamp whose parent is the main commit, tags it vYYYY.MM.DD-rc.N
 #     and makes a GitHub prerelease. global-sync ignores rc tags, so no session moves to it,
 #   - makes the branch rc/<rc tag> at that commit, for Promote (promote.yml) to run from (the
 #     GitHub app lists branches only), and deletes the same version's lower rc branches.
-# A successful run deletes the candidate/<sha> branch; a failed or refused one keeps it, so
-# Candidate can run again on it; auto-candidate deletes it when main gets a newer candidate, or
-# Kade does. Only the tag and cleanup jobs can write, and they run none of the repository's code; the tag job refuses unless the blob and tree it creates are the ones
-# the check job tested.
+# No branch is made or deleted for the candidate itself. Only the tag job can write, and it runs
+# none of the repository's code; it refuses unless the blob and tree it creates are the ones the
+# check job tested.
 name: Candidate
 
 on:
@@ -41,12 +43,6 @@ jobs:
       content: ${{ steps.stamp.outputs.content }}
       notes: ${{ steps.stamp.outputs.notes }}
     steps:
-      - name: Only a candidate branch is a candidate
-        run: |
-          case "$GITHUB_REF" in
-            refs/heads/candidate/*) ;;
-            *) echo "::error::a candidate is made from a candidate/* branch only; this run is on $GITHUB_REF"; exit 1 ;;
-          esac
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
@@ -54,18 +50,14 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - name: The branch names a commit on main, has not moved, and its checks passed
+      - name: Only main is a candidate, with something to release and its checks passed
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
-          node scripts/release.cjs check-candidate "$GITHUB_REF_NAME"
-          head=$(gh api "repos/$REPO/git/ref/heads/$GITHUB_REF_NAME" --jq .object.sha)
-          if [ "$head" != "$GITHUB_SHA" ]; then
-            echo "::error::$GITHUB_REF_NAME moved from $GITHUB_SHA to $head"
-            exit 1
-          fi
+          node scripts/release.cjs check-main "$GITHUB_REF"
+          node scripts/release.cjs check-changes > /dev/null
           gh api "repos/$REPO/commits/$GITHUB_SHA/check-runs?per_page=100" \
             | node scripts/release.cjs checks-passed "$GITHUB_RUN_ID"
       - name: Stamp AGENTS.md and test that tree
@@ -125,11 +117,6 @@ jobs:
           NOTES: ${{ needs.check.outputs.notes }}
         run: |
           set -euo pipefail
-          head=$(gh api "repos/$REPO/git/ref/heads/$GITHUB_REF_NAME" --jq .object.sha)
-          if [ "$head" != "$GITHUB_SHA" ]; then
-            echo "::error::$GITHUB_REF_NAME moved from $GITHUB_SHA to $head"
-            exit 1
-          fi
           blob=$(gh api "repos/$REPO/git/blobs" -f encoding=base64 -f content="$CONTENT" --jq .sha)
           if [ "$blob" != "$BLOB" ]; then
             echo "::error::the AGENTS.md blob $blob is not the tested $BLOB"
@@ -162,27 +149,3 @@ jobs:
             if [ -n "$SUPERSEDED" ]; then echo "Deleted the superseded $SUPERSEDED."; fi
             echo "Try it in one session, then Actions > Promote > Run workflow > branch rc/$RC."
           } >> "$GITHUB_STEP_SUMMARY"
-
-  cleanup:
-    name: delete the candidate branch
-    needs: [check, tag]
-    if: needs.tag.result == 'success' && startsWith(github.ref, 'refs/heads/candidate/')
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    permissions:
-      contents: write  # deleting the branch
-    steps:
-      - name: Delete the branch, the candidate being made
-        env:
-          GH_TOKEN: ${{ github.token }}
-          REPO: ${{ github.repository }}
-        run: |
-          if gh api -X DELETE "repos/$REPO/git/refs/heads/$GITHUB_REF_NAME" > /dev/null; then
-            echo "Deleted $GITHUB_REF_NAME." >> "$GITHUB_STEP_SUMMARY"
-          elif [ "$(gh api "repos/$REPO/git/matching-refs/heads/$GITHUB_REF_NAME" \
-                      --jq 'map(select(.ref == "refs/heads/" + env.GITHUB_REF_NAME)) | length')" = 0 ]; then
-            echo "$GITHUB_REF_NAME was already deleted." >> "$GITHUB_STEP_SUMMARY"
-          else
-            echo "::error::could not delete $GITHUB_REF_NAME; Kade deletes it"
-            exit 1
-          fi

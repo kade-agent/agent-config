@@ -249,52 +249,33 @@ test("AGENTS.md sends every release to the release-flow skill, and the skill exi
     "agent-skills/release-flow/SKILL.md exists");
 });
 
-// The candidate flow (docs/release-flow-plan.md, step 4): the agent pushes candidate/<12-character
-// sha> at a commit on main, Kade runs Candidate, then Promote on rc/<rc tag>. The skill describes
-// the flow and no longer the PR from main into rc. AGENTS.md sends every release to the skill
-// (Precedence, tested above) and has no room for the branch (60 lines), so the skill names it as
-// the one branch an agent pushes outside claude/<task>, never pushed to again.
-test("release-flow describes Candidate and Promote, and the candidate branch an agent pushes once", () => {
+// Candidate on main (docs/release-flow-plan.md, section 9, Kade 2026-10-24): Kade runs Actions >
+// Candidate on main itself, so no branch is pushed at all; then Promote on rc/<rc tag>.
+const WORKFLOWS = path.join(ROOT, ".github", "workflows");
+
+test("release-flow says Candidate runs on main and no longer tells an agent to push candidate/", () => {
   const skill = fs.readFileSync(path.join(ROOT, "agent-skills", "release-flow", "SKILL.md"), "utf8").replace(/\s+/g, " ");
-  for (const needle of ["candidate/<12-character sha>", "rc/<rc tag>", "Actions > Candidate", "Actions > Promote", "candidate-guard.yml"]) {
+  for (const needle of ["Actions > Candidate", "Actions > Promote", "rc/<rc tag>", "candidate-guard.yml", "Candidate on `main`", "floor"]) {
     assert.ok(skill.includes(needle), `the skill names ${needle}`);
   }
-  for (const gone of ["--base rc", "PR from main into rc", "pull request from main into rc", "Release on rc"]) {
+  for (const gone of ["--base rc", "PR from main into rc", "Release on rc", "candidate/<12-character sha>", "candidate/<sha>",
+    "auto-candidate", "never pushed to again", "outside `claude/<task>`"]) {
     assert.ok(!skill.includes(gone), `the skill no longer says ${gone}`);
   }
-  assert.ok(skill.includes("never pushed to again"), "the skill keeps the candidate branch immutable");
-  assert.ok(skill.includes("outside `claude/<task>`"), "the skill names it as the exception to the Branches rule");
 });
 
-// Auto-candidate (Kade, 2026-10-23): agents' pushes of candidate/ were often refused, so CI pushes
-// the branch where a repository has auto-candidate.yml, and an agent pushes it by hand only when
-// that run failed.
-test("release-flow lets CI push the candidate branch, and an agent only when that run failed", () => {
-  const skill = fs.readFileSync(path.join(ROOT, "agent-skills", "release-flow", "SKILL.md"), "utf8").replace(/\s+/g, " ");
-  assert.ok(skill.includes("auto-candidate.yml"), "the skill names auto-candidate.yml");
-  assert.ok(skill.includes("only when that run failed"), "the agent pushes by hand only when the run failed");
-  assert.ok(fs.existsSync(path.join(ROOT, ".github", "workflows", "auto-candidate.yml")));
+test("auto-candidate.yml is gone and candidate-guard.yml guards rc/** only", () => {
+  assert.ok(!fs.existsSync(path.join(WORKFLOWS, "auto-candidate.yml")));
+  const guard = fs.readFileSync(path.join(WORKFLOWS, "candidate-guard.yml"), "utf8");
+  assert.match(guard, /branches: \["rc\/\*\*"\]/);
+  assert.doesNotMatch(guard, /candidate\/\*\*/);
 });
 
-// Kade, 2026-10-23: a failed or refused Candidate keeps its candidate/ branch so he can run it
-// again; only a successful one (the rc tag and prerelease made) deletes it.
-test("candidate.yml deletes the candidate branch only after the tag job succeeded", () => {
-  const text = fs.readFileSync(path.join(ROOT, ".github", "workflows", "candidate.yml"), "utf8");
-  const job = /\n  cleanup:\n([^]*?)(?=\n  \S|$(?![^]))/.exec(text);
-  assert.ok(job, "candidate.yml has a cleanup job");
-  assert.match(job[1], /name: delete the candidate branch/, "the job keeps the name the release script lists");
-  const cond = /^    if: (.*)$/m.exec(job[1]);
-  assert.ok(cond, "the cleanup job has an if");
-  assert.match(cond[1], /needs\.tag\.result == 'success'/, "it runs only when the tag job succeeded");
-  assert.ok(!cond[1].includes("always()"), "it does not run whatever happens");
-  assert.doesNotMatch(text, /Whatever happens, the last job deletes/, "the header does not say it is deleted whatever happens");
-});
-
-test("release-flow says a failed Candidate keeps its branch", () => {
-  const skill = fs.readFileSync(path.join(ROOT, "agent-skills", "release-flow", "SKILL.md"), "utf8").replace(/\s+/g, " ");
-  assert.ok(!skill.includes("Whatever happens, it deletes"), "the skill no longer says the branch goes whatever happens");
-  assert.ok(skill.includes("a failed or refused Candidate keeps"), "the skill says a failed Candidate keeps the branch");
-  assert.ok(skill.includes("already a candidate"), "the skill names the half-made rc tag case");
+test("candidate.yml runs on main only, asks for something to release, and has no cleanup job", () => {
+  const text = fs.readFileSync(path.join(WORKFLOWS, "candidate.yml"), "utf8");
+  assert.match(text, /release\.cjs check-main "\$GITHUB_REF"/, "the ref check");
+  assert.match(text, /release\.cjs check-changes/, "something to release");
+  assert.doesNotMatch(text, /check-candidate|\n  cleanup:|delete the candidate branch|refs\/heads\/candidate/);
 });
 
 // The dispatcher skill (Kade, 2026-10-21) runs a queue through sub sessions. A worker left waiting is
