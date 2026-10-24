@@ -357,6 +357,14 @@ test("the dispatcher skill says how it watches PR events and tells the worker at
   }
   assert.doesNotMatch(watch, /[?&](token|access_token|auth)=/, "no token in a URL");
   assert.doesNotMatch(watch, /192\.168\./, "no LAN address in a public repository");
+  // EB8-watch: one NATS account per org; the LAN needs the org's reader key too (design sections 6, 7).
+  assert.ok(!watch.includes("needs no key"), "pr-watch.md: the LAN listener no longer runs keyless");
+  assert.ok(watch.includes("reader-<owner>"), "pr-watch.md names the org's reader-<owner> key");
+  assert.ok(!watch.includes("replacing `CLOUD_NKEY`"), "pr-watch.md: cloud seed is revoked via READER_NKEY_<OWNER>");
+  assert.ok(watch.includes("READER_NKEY_<OWNER>"), "pr-watch.md names READER_NKEY_<OWNER>");
+  assert.ok(watch.includes("One dispatcher per org") && watch.includes("`check_run` and `check_suite` never do"),
+    "pr-watch.md: one dispatcher per org, and the filtered consumer drops check events");
+  assert.equal(watch.split("132276d").length - 1, 2, "both event-broker pins stay at 132276d");
   const worker = fs.readFileSync(path.join(dir, "references", "worker-prompt.md"), "utf8");
   assert.match(worker, /message from the dispatcher about your PR is a wake/, "worker rule 9 counts it as a wake");
 });
