@@ -23,7 +23,7 @@
    private init script.
 5. **Cloud auth is a NAS-made private key, with no token:** an NKey, which is an Ed25519 keypair.
    The broker keeps only the public key.
-6. **Local sessions connect over the LAN (192.168.50.\*) with no key.** That access comes from a
+6. **Local sessions connect over the LAN with no key.** That access comes from a
    separate listener that is not exposed, never from a source-IP check.
 7. **Only the dispatcher subscribes**, and it manages the workers. Workers do not subscribe.
 8. **The receiver detects behind and conflicting PRs** by asking GitHub after each trigger
@@ -44,7 +44,7 @@ worker pushes / merges ─▶ GitHub ─(App webhook, HMAC)─▶ receiver (Node
                                                      │       (retry past "unknown") → publish "mergeable" on change
                                                      ▼
                                    NATS JetStream, stream GITHUB (subjects github.>, 7 days, 2-min dedupe)
-                                      ├─ LAN    nats://192.168.50.x:4222   no key, subscribe-only
+                                      ├─ LAN    nats://<LAN address>:4222  no key, subscribe-only
                                       └─ public wss://<nas domain>/nats    NKey, subscribe-only
                                                      ▼
                            dispatcher Monitor: durable consumer "dispatcher" → SendMessage the worker
@@ -146,13 +146,17 @@ What this cannot see, and what covers it:
 |---|---|---|---|
 | GitHub | `https://<nas domain>/github` | HMAC with the webhook secret | send deliveries |
 | Receiver | NATS, inside compose | `receiver` NKey | publish `github.>` only |
-| Local dispatcher | `nats://192.168.50.x:4222` | nothing (`no_auth_user`, plain TCP connections only) | subscribe and consume `GITHUB` only |
+| Local dispatcher | `nats://<LAN address>:4222` | nothing (`no_auth_user`, plain TCP connections only) | subscribe and consume `GITHUB` only |
 | Cloud dispatcher | `wss://<nas domain>/nats` | `cloud` NKey (websocket connections only) | subscribe and consume `GITHUB` only |
 
 - NKeys are made on the NAS with `nk -gen user -pubout` (in the `nats-box` image). Only public
   keys go in the server config. A key is revoked by removing its public key and reloading.
 - The cloud init script writes the seed to a file with `umask 077` and never echoes it. It sets
   `EVENT_BROKER_URL`, plus `EVENT_BROKER_NKEY_FILE` (cloud only).
+- No NAS details are committed: no LAN address, domain, key or secret. agent-config and
+  event-broker are both public (Kade, 2026-10-24). They use placeholders such as
+  `<LAN address>` and `<nas domain>`, and the real values live only in the NAS's `.env` and
+  secrets files and in the dispatcher's environment.
 - Accepted risk: any device on the LAN can read the event stream (repository names, PR numbers,
   branches, check results). Guest and IoT devices stay on an isolated network.
 
@@ -161,7 +165,7 @@ What this cannot see, and what covers it:
 | Step | Where | State |
 |---|---|---|
 | The dispatcher's PR watch (gh poll, guard, re-arm, worker messages) | agent-config #110 | merged 2026-10-24 |
-| SSE receiver, the first design | event-broker #1 | replaced by this design: close unmerged |
+| SSE receiver, the first design | event-broker #1 | merged 2026-10-24; replaced by `claude/nats-receiver` |
 | Receiver + NATS config + compose + CI with an integration job + README | event-broker, `claude/nats-receiver` | next |
 | `pr-watch.md` on the NATS consumer, the new event rows, the init-script snippet | agent-config | after the receiver |
 | Create the App, install it, make the keys, deploy, proxy routes | Kade, on GitHub and the NAS | after the receiver |
