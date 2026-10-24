@@ -180,15 +180,27 @@ What this cannot see, and what covers it:
 
 ## 6. Durability and the dispatcher's watch
 
-- **The stream:** `GITHUB`, file storage, subjects `github.>`, kept for 7 days, with a 2-minute
-  duplicate window keyed by the delivery GUID.
-- **The consumer:** a durable consumer named `dispatcher`, with explicit acks, new messages only
-  and a 60 s ack wait. The Monitor reads it with
+- **The stream:** one per account, each named `GITHUB`, file storage, subjects `github.<owner>.>`,
+  kept for 7 days, with a 2-minute duplicate window keyed by the delivery GUID.
+- **The consumer:** a durable consumer named `dispatcher` in each account, with explicit acks, new
+  messages only, a 60 s ack wait and these `filter_subjects` (`<owner>` is the account):
+  - `github.<owner>.*.pr.*.pull_request`, `github.<owner>.*.pr.*.workflow_run`,
+    `github.<owner>.*.pr.*.mergeable`, `github.<owner>.*.pr.*.pull_request_review`,
+    `github.<owner>.*.pr.*.issue_comment`;
+  - `github.<owner>.*.issue.>`;
+  - `github.<owner>.*.branch.*.workflow_run`;
+  - `github.<owner>.*.push.*`.
+
+  The receiver still publishes every kept event (section 4 is unchanged). The filters drop
+  `check_run`, `check_suite` and runs on branches with no PR other than `workflow_run`. The
+  Monitor reads it with
   `nats consumer next GITHUB dispatcher --raw --count 1 --timeout 60s`, one message per call, and
   the CLI acks each message as it reads it. Never `--wait`: natscli 0.5.0 sleeps a random 0 to D
   before the ack (event-broker #5). When a Monitor ends (30 minutes at most), the next one
   resumes after the last ack.
-- **Single instance:** the dispatcher's pidfile guard stays, so only the newest watch runs.
+- **Single instance:** the dispatcher's pidfile guard stays, so only the newest watch runs. There
+  is one dispatcher per org, each reading its own org's consumer; dispatchers of different orgs no
+  longer share one consumer.
 - **Backstop:** on every re-arm, the dispatcher runs one gh sweep of its open PRs. This catches
   deliveries lost while the NAS was down.
 - **Fallback:** when the broker cannot be reached, the 60 s gh poll runs, as in `pr-watch.md`.
