@@ -104,8 +104,9 @@ Report each switch between broker and poll to Kade in one line.
 
 ## Sub-issue events
 
-The broker carries PR, check and push events, not issue events yet (a design-doc follow-up of
-#118). Until it does, poll the lanes' sub-issues on each wake and each re-arm:
+The broker carries them (see the event section): a task's sub-issue closing, being labeled or
+reopened, and each new comment arrive as events. Do not poll on every wake. GitHub does not retry
+a lost delivery, so on every re-arm, and in the gh-poll fallback, sweep the lanes' sub-issues:
 
 ```bash
 gh issue list -R <owner>/tasks --state open --json number,title,labels,updatedAt
