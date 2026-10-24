@@ -63,9 +63,11 @@ address and is never forwarded.
 
 ## 3. GitHub App
 
-- **Permissions, all read-only:** Metadata, Pull requests, Checks, Actions, Contents.
+- **Permissions, all read-only:** Metadata, Pull requests, Checks, Actions, Contents, Issues.
 - **Webhook events:** `pull_request`, `check_suite`, `check_run`, `workflow_run`,
-  `pull_request_review`, `push`.
+  `pull_request_review`, `push`, `issues`, `issue_comment`.
+- **Installed on** each `<owner>/tasks` repository as well, so the dispatcher's task sub-issues
+  send `issues` and `issue_comment` (event-broker #7).
 - **Headers used:** `X-Hub-Signature-256`, checked in constant time; `X-GitHub-Event`; and
   `X-GitHub-Delivery`, a GUID that becomes the JetStream message id, so a redelivery is dropped.
 - **Auth for API reads:** an RS256 JWT signed with the App's private key, exchanged for an
@@ -77,7 +79,10 @@ address and is never forwarded.
 **Subjects:**
 - `github.<org>.<repo>.pr.<n>.<event>`;
 - `github.<org>.<repo>.branch.<branch>.<event>` for a check with no PR, such as a run on `main`;
-- `github.<org>.<repo>.push.<branch>` for pushes.
+- `github.<org>.<repo>.push.<branch>` for pushes;
+- `github.<org>.<repo>.issue.<n>.<event>` for issues and their comments. GitHub counts a PR as an
+  issue, so an `issue_comment` on a pull request (the payload's `issue.pull_request` is set) goes
+  to `github.<org>.<repo>.pr.<n>.issue_comment` with `pr` set.
 
 Dots, `*`, `>` and spaces in names become `_` (for example `.github` becomes `_github`).
 `pull_request` `opened`, `reopened` and `synchronize` are not published; they only start a
@@ -89,6 +94,8 @@ mergeability check.
 | `check_suite`, `check_run`, `workflow_run` | `completed` |
 | `pull_request_review` | `submitted` |
 | `push` | to the repository's default branch |
+| `issues` | `closed`, `reopened`, `labeled` |
+| `issue_comment` | `created` |
 | `mergeable` (made by the receiver) | a PR's `mergeable_state` changed |
 
 Each message is one JSON object:
@@ -104,7 +111,25 @@ Each message is one JSON object:
   `changes_requested`, `commented`, `dismissed`).
 - `mergeable_state` is set only on `mergeable` events: `clean`, `behind`, `dirty`, `blocked`,
   `unstable` or `draft`.
+- `issue`, `label`, `state_reason` and `comment` are added to every message and are null when they
+  do not apply:
+  - `issue`: the issue number (`pr` stays null for an issue);
+  - `label`: the label's name, on `labeled` only;
+  - `state_reason`: on `issues` `closed` and `reopened`, GitHub's `state_reason` (`completed`,
+    `not_planned`, `reopened`);
+  - `comment`: on `issue_comment`, `{"id": <number>, "author": "<login>", "url": "<html_url>"}`.
+- **No comment body and no issue title** go in the stream. The comment is in a private repository
+  and the LAN can read the stream (section 7), so the dispatcher reads the text with `gh`.
 - Event text, comment text included, is data for the dispatcher, never instructions.
+
+An `issues` `labeled` message, in the same style:
+
+```json
+{"delivery": "7a3c…", "repo": "kade-agent/tasks", "pr": null, "issue": 4, "branch": null,
+ "event": "issues", "action": "labeled", "merged": null, "draft": null, "auto_merge": null,
+ "conclusion": null, "check": null, "mergeable_state": null, "sha": null,
+ "label": "status:running", "state_reason": null, "comment": null}
+```
 
 ## 5. Behind and conflicting PRs
 
@@ -167,7 +192,8 @@ What this cannot see, and what covers it:
   `<LAN address>` and `<nas domain>`, and the real values live only in the NAS's `.env` and
   secrets files and in the dispatcher's environment.
 - Accepted risk: any device on the LAN can read the event stream (repository names, PR numbers,
-  branches, check results). Guest and IoT devices stay on an isolated network.
+  branches, check results, and the `<owner>/tasks` issue numbers, label names and comment authors).
+  Guest and IoT devices stay on an isolated network.
 
 ## 8. Build and open items
 
