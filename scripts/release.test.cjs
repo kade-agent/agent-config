@@ -133,13 +133,11 @@ test("rcTag is the next candidate number of a version", () => {
   assert.throws(() => r.rcTag("v2026.10.12-rc.1", []), /not a release tag/);
 });
 
-test("checkCandidate wants candidate/<12-character sha of HEAD>, on main, and no other candidate", () => {
-  const head = "0123456789abcdef0123456789abcdef01234567";
-  assert.doesNotThrow(() => r.checkCandidate("candidate/0123456789ab", head, true, []));
-  assert.throws(() => r.checkCandidate("candidate/v2026.10.12", head, true, []), /candidate\/<12-character sha>/);
-  assert.throws(() => r.checkCandidate("candidate/fedcba987654", head, true, []), /not HEAD/);
-  assert.throws(() => r.checkCandidate("candidate/0123456789ab", head, false, []), /not on origin\/main/);
-  assert.throws(() => r.checkCandidate("candidate/0123456789ab", head, true, ["candidate/aaaaaaaaaaaa"]), /candidate\/aaaaaaaaaaaa is left over/);
+test("checkMain wants refs/heads/main and nothing else", () => {
+  assert.doesNotThrow(() => r.checkMain("refs/heads/main"));
+  for (const ref of ["refs/heads/candidate/0123456789ab", "refs/heads/claude/x", "refs/heads/rc/v1-rc.1", "refs/tags/v1", "main", ""]) {
+    assert.throws(() => r.checkMain(ref), /a candidate is made from refs\/heads\/main only/, ref);
+  }
 });
 
 test("checksPassed wants at least one finished check run, none failed, this run's own left out", () => {
@@ -178,19 +176,24 @@ test("rc and check-promote read the repository's tags and the candidate's AGENTS
   assert.strictEqual(release(dev, "check-promote", "v2026.10.12-rc.1").trim(), "v2026.10.12");
 });
 
-test("check-candidate reads HEAD, origin/main and the origin's candidate branches", () => {
+test("check-main takes the ref from the command line", () => {
   const { dev } = released();
-  const short = git(dev, "rev-parse", "HEAD").slice(0, 12);
-  git(dev, "fetch", "-q", "origin");
-  git(dev, "push", "-q", "origin", `HEAD:refs/heads/candidate/${short}`);
-  assert.doesNotThrow(() => release(dev, "check-candidate", `candidate/${short}`));
-  git(dev, "push", "-q", "origin", "HEAD:refs/heads/candidate/aaaaaaaaaaaa");
-  assert.throws(() => release(dev, "check-candidate", `candidate/${short}`), /left over/);
-  git(dev, "push", "-q", "origin", "--delete", "candidate/aaaaaaaaaaaa");
-  fs.writeFileSync(path.join(dev, "AGENTS.md"), "Global rules: v2026.10.09\n\nNot on main.\n");
-  git(dev, "commit", "-q", "-am", "not on main");
-  const off = git(dev, "rev-parse", "HEAD").slice(0, 12);
-  assert.throws(() => release(dev, "check-candidate", `candidate/${off}`), /not on origin\/main/);
+  assert.doesNotThrow(() => release(dev, "check-main", "refs/heads/main"));
+  assert.throws(() => release(dev, "check-main", "refs/heads/candidate/0123456789ab"), /main only/);
+  assert.throws(() => release(dev, "check-candidate", "x"), /usage: release\.cjs/);
+});
+
+test("check-changes refuses with nothing to release, and lists what main brings otherwise", () => {
+  const { dev } = released();
+  assert.throws(() => release(dev, "check-changes"), /nothing to release/);
+  fs.mkdirSync(path.join(dev, "docs"));
+  fs.writeFileSync(path.join(dev, "docs", "plan.md"), "plan\n");
+  git(dev, "add", "-A");
+  git(dev, "commit", "-q", "-m", "docs");
+  assert.throws(() => release(dev, "check-changes"), /nothing to release/);
+  fs.writeFileSync(path.join(dev, "CLAUDE.md"), "@AGENTS.md\n\n");
+  git(dev, "commit", "-q", "-am", "rules");
+  assert.strictEqual(release(dev, "check-changes"), "CLAUDE.md\n");
 });
 
 // A candidate that failed leaves its check runs on the main commit; a new candidate branch at the
@@ -207,7 +210,7 @@ test("checksPassed leaves out the candidate workflows' own jobs from any run", (
 });
 
 test("the job names checksPassed leaves out are the candidate workflows' jobs", () => {
-  const text = ["candidate.yml", "candidate-guard.yml", "auto-candidate.yml"]
+  const text = ["candidate.yml", "candidate-guard.yml"]
     .map((f) => fs.readFileSync(path.join(__dirname, "..", ".github", "workflows", f), "utf8"))
     .join("\n");
   const names = [...text.matchAll(/^ {4}name: (.+)$/gm)].map((m) => m[1]);
@@ -236,19 +239,17 @@ test("releasedBranches are the rc branches of the released version and every old
   assert.deepStrictEqual(r.releasedBranches(branches, "v1.2.0"), ["rc/v1.2.0-rc.1", "rc/v1.2.0-rc.2", "rc/v1.1.0-rc.4"]);
 });
 
-test("rc-branch, superseded and released read origin's rc/ branches; check-candidate ignores them", () => {
+test("rc-branch, superseded and released read origin's rc/ branches", () => {
   const { dev } = released();
   git(dev, "fetch", "-q", "origin");
   git(dev, "push", "-q", "origin", "HEAD:refs/heads/rc/v2026.10.12-rc.1", "HEAD:refs/heads/rc/v2026.10.09.3-rc.1", "HEAD:refs/heads/rc/v2026.10.13-rc.1");
   assert.strictEqual(release(dev, "rc-branch", "rc/v2026.10.12-rc.1").trim(), "v2026.10.12-rc.1");
   assert.strictEqual(release(dev, "superseded", "v2026.10.12-rc.2").trim(), "rc/v2026.10.12-rc.1");
   assert.strictEqual(release(dev, "released", "v2026.10.12").trim(), "rc/v2026.10.09.3-rc.1 rc/v2026.10.12-rc.1");
-  const short = git(dev, "rev-parse", "HEAD").slice(0, 12);
-  assert.doesNotThrow(() => release(dev, "check-candidate", `candidate/${short}`));
 });
 
-// Auto-candidate (docs/release-flow-plan.md, section 4a): after test passes on main, CI pushes the
-// candidate branch when main has a file deployed to ~/.claude that the latest release has not.
+// Candidate on main (docs/release-flow-plan.md, section 9.1): Candidate itself asks whether main has
+// a file deployed to ~/.claude that the latest release has not (check-changes).
 test("deployedPaths keeps the files deploy-exclude lets into ~/.claude", () => {
   const exclude = fs.readFileSync(path.join(__dirname, "..", "deploy-exclude"), "utf8");
   const files = [
