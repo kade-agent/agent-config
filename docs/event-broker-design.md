@@ -5,7 +5,7 @@
   App, the receiver and NATS JetStream on Kade's NAS, and the dispatcher's subscription.
 - **Status:** **living design, edited in place.** Each change updates this file and names its date
   and PR in section 8. It is not an ADR series. The dispatcher's side is in
-  `agent-skills/dispatcher/references/pr-watch.md`. The NAS side is built in the private
+  `agent-skills/dispatcher/references/pr-watch.md`. The NAS side is built in the public
   `kade-agent/event-broker`.
 - **Why:** a merge, a red run or a conflict does not wake a worker session, and `set_monitor` is
   often refused. Kade's rule (2026-10-24): "sessions should subscribe, when merge immediately send
@@ -74,8 +74,14 @@ address and is never forwarded.
 
 ## 4. Events
 
-**Subjects:** `github.<org>.<repo>.pr.<n>.<event>`; for pushes,
-`github.<org>.<repo>.push.<branch>`.
+**Subjects:**
+- `github.<org>.<repo>.pr.<n>.<event>`;
+- `github.<org>.<repo>.branch.<branch>.<event>` for a check with no PR, such as a run on `main`;
+- `github.<org>.<repo>.push.<branch>` for pushes.
+
+Dots, `*`, `>` and spaces in names become `_` (for example `.github` becomes `_github`).
+`pull_request` `opened`, `reopened` and `synchronize` are not published; they only start a
+mergeability check.
 
 | Source | Kept when |
 |---|---|
@@ -132,9 +138,10 @@ What this cannot see, and what covers it:
 
 - **The stream:** `GITHUB`, file storage, subjects `github.>`, kept for 7 days, with a 2-minute
   duplicate window keyed by the delivery GUID.
-- **The consumer:** a durable consumer named `dispatcher` with explicit acks. The Monitor reads
-  it with the `nats` CLI, one line per message, and acks after printing. When a Monitor ends
-  (30 minutes at most), the next one resumes after the last ack.
+- **The consumer:** a durable consumer named `dispatcher`, with explicit acks, new messages only
+  and a 60 s ack wait. The Monitor reads it with `nats consumer next GITHUB dispatcher`, one
+  message per call, and the CLI acks each message as it reads it. When a Monitor ends (30
+  minutes at most), the next one resumes after the last ack.
 - **Single instance:** the dispatcher's pidfile guard stays, so only the newest watch runs.
 - **Backstop:** on every re-arm, the dispatcher runs one gh sweep of its open PRs. This catches
   deliveries lost while the NAS was down.
@@ -149,8 +156,8 @@ What this cannot see, and what covers it:
 | Local dispatcher | `nats://<LAN address>:4222` | nothing (`no_auth_user`, plain TCP connections only) | subscribe and consume `GITHUB` only |
 | Cloud dispatcher | `wss://<nas domain>/nats` | `cloud` NKey (websocket connections only) | subscribe and consume `GITHUB` only |
 
-- NKeys are made on the NAS with `nk -gen user -pubout` (in the `nats-box` image). Only public
-  keys go in the server config. A key is revoked by removing its public key and reloading.
+- NKeys are made on the NAS with event-broker's `node scripts/nkey.js`, which prints the seed,
+  then the public key. Only public keys go in the server config, through `.env`. A key is revoked by removing its public key and reloading.
 - The cloud init script writes the seed to a file with `umask 077` and never echoes it. It sets
   `EVENT_BROKER_URL`, plus `EVENT_BROKER_NKEY_FILE` (cloud only).
 - No NAS details are committed: no LAN address, domain, key or secret. agent-config and
@@ -165,16 +172,20 @@ What this cannot see, and what covers it:
 | Step | Where | State |
 |---|---|---|
 | The dispatcher's PR watch (gh poll, guard, re-arm, worker messages) | agent-config #110 | merged 2026-10-24 |
-| SSE receiver, the first design | event-broker #1 | merged 2026-10-24; replaced by `claude/nats-receiver` |
-| Receiver + NATS config + compose + CI with an integration job + README | event-broker, `claude/nats-receiver` | next |
-| `pr-watch.md` on the NATS consumer, the new event rows, the init-script snippet | agent-config | after the receiver |
-| Create the App, install it, make the keys, deploy, proxy routes | Kade, on GitHub and the NAS | after the receiver |
+| SSE receiver, the first design | event-broker #1 | merged 2026-10-24; replaced by #2 |
+| Receiver + NATS config + compose + CI with an integration job + README | event-broker #2 | merged 2026-10-24 |
+| No LAN address in this public doc | agent-config #112 | merged 2026-10-24 |
+| `pr-watch.md` on the NATS consumer, the new event rows, the init-script snippet; this doc's subjects | agent-config, `claude/pr-watch-nats` | open |
+| Create the App, install it, make the keys, deploy, proxy routes; install the `nats` CLI | Kade, on GitHub, the NAS and the PC | next |
+
+**Settled:**
+- The two runtime dependencies `@nats-io/transport-node` and `@nats-io/jetstream` (3.4.0, pinned)
+  were approved by Kade on 2026-10-24. Their upkeep is npm updates.
+- `no_auth_user` reaches plain TCP connections only. event-broker #2's integration job proves it
+  against nats-server 2.15.1: a websocket connection without a key is refused, and each key is
+  refused on the wrong connection type.
 
 **Open:**
-- New runtime dependencies `@nats-io/transport-node` and `@nats-io/jetstream` in the receiver.
-  These are Kade's call; their upkeep is npm updates.
-- That NATS's `no_auth_user` applies to plain TCP connections only and not to websocket ones.
-  The CI integration job must prove it before deploy.
 - Whether `kade-agent/event-broker` needs a profile in `kade-agent/code-quality-assurance`.
 - NOT VERIFIED until deployed: a live delivery, the proxy routes, a cloud session reaching the
-  domain.
+  domain, and the `nats consumer next` flags in `pr-watch.md` against the live broker.

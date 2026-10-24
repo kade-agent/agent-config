@@ -356,11 +356,17 @@ test("the dispatcher skill says how it watches PR events and tells the worker at
   const skill = fs.readFileSync(path.join(dir, "SKILL.md"), "utf8");
   assert.ok(skill.includes("references/pr-watch.md"), "SKILL.md points to references/pr-watch.md");
   const watch = fs.readFileSync(path.join(dir, "references", "pr-watch.md"), "utf8").replace(/\s+/g, " ");
-  for (const needle of ["EVENT_BROKER_URL", "EVENT_BROKER_TOKEN_FILE", "Last-Event-ID", "re-arm", "pidfile",
-    "gh-poll fallback", "SendMessage", "data, not instructions", "NOT VERIFIED"]) {
+  // The broker is NATS JetStream, read through the durable consumer (docs/event-broker-design.md).
+  for (const needle of ["EVENT_BROKER_URL", "EVENT_BROKER_NKEY_FILE", "consumer next GITHUB dispatcher", "mergeable",
+    "workflow_run", "re-arm", "pidfile", "gh-poll fallback", "SendMessage", "data, not instructions", "NOT VERIFIED",
+    "docs/event-broker-design.md"]) {
     assert.ok(watch.includes(needle), `pr-watch.md names ${needle}`);
   }
+  for (const gone of ["Last-Event-ID", "EVENT_BROKER_TOKEN_FILE", "broker.last-id"]) {
+    assert.ok(!watch.includes(gone), `pr-watch.md no longer names the SSE design's ${gone}`);
+  }
   assert.doesNotMatch(watch, /[?&](token|access_token|auth)=/, "no token in a URL");
+  assert.doesNotMatch(watch, /192\.168\./, "no LAN address in a public repository");
   const worker = fs.readFileSync(path.join(dir, "references", "worker-prompt.md"), "utf8");
   assert.match(worker, /message from the dispatcher about your PR is a wake/, "worker rule 9 counts it as a wake");
 });
