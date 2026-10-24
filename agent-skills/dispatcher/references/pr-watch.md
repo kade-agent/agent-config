@@ -92,11 +92,14 @@ failures in a row are.
   `nats-0.5.0-windows-amd64.zip` in the natscli releases, with its folder on the user's `PATH`,
   and the app restarted. (`NATS_BIN` can point to it directly.) In the cloud, the setup script
   installs it (below).
-- **Checked live** (2026-10-24):
+- **Checked live** (2026-10-24, before the per-org accounts; the LAN needed no key then):
   - on Kade's PC, over the LAN with no key, the consumer gave a real stella-rain/app
     `workflow_run` and acked it;
   - event-broker's CI ran `watch.sh` against nats-server over the LAN with no key, and over
     websocket with the seed written from the variable.
+
+  Since the accounts: event-broker#12's CI reads the per-account filtered consumers with the
+  reader keys.
 
 ## The gh-poll fallback
 
@@ -159,8 +162,9 @@ there. Conflicts between two open PRs are not in these events: the `git merge-tr
 The cloud environment's settings:
 
 - **Variables:** `EVENT_BROKER_URL=wss://<nats host>`,
-  `EVENT_BROKER_NKEY_FILE=/root/.event-broker.nk`, and `EVENT_BROKER_CLOUD_SEED` (the `cloud`
-  seed: read-only on the broker, revoked by replacing `CLOUD_NKEY` on the NAS).
+  `EVENT_BROKER_NKEY_FILE=/root/.event-broker.nk`, and `EVENT_BROKER_CLOUD_SEED` (the org's
+  `reader-<owner>` seed: read-only on the org's account, revoked by replacing
+  `READER_NKEY_<OWNER>` on the NAS).
 - **Network access:** allows `<nats host>`.
 - **Setup script:** installs the pinned CLI and nothing else:
   ```bash
@@ -178,7 +182,8 @@ To check the path without taking an event:
 nats --server "$EVENT_BROKER_URL" --nkey "$EVENT_BROKER_NKEY_FILE" consumer info GITHUB dispatcher
 ```
 
-Run it after the first watch has written the key file.
+Run it after the first watch has written the key file. On the LAN it works the same way, with
+`EVENT_BROKER_URL` the LAN address and the key file of the `reader-<owner>` seed.
 
 NOT VERIFIED: a real cloud session running `watch.sh` through the sandbox's proxy. Until one has,
 a cloud dispatcher uses the gh-poll fallback.
