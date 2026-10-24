@@ -210,21 +210,28 @@ What this cannot see, and what covers it:
 | Who | Connects to | Proves itself with | May |
 |---|---|---|---|
 | GitHub | `https://<nas domain>/github` | HMAC with the webhook secret | send deliveries |
-| Receiver | NATS, inside compose | `receiver` NKey | publish `github.>` only |
-| Local dispatcher | `nats://<LAN address>:4222` | nothing (`no_auth_user`, plain TCP connections only) | subscribe and consume `GITHUB` only |
-| Cloud dispatcher | `wss://<nas domain>/nats` | `cloud` NKey (websocket connections only) | subscribe and consume `GITHUB` only |
+| Receiver | NATS, inside compose, one connection per account | `receiver-<owner>` NKey | publish `github.<owner>.>` and that stream's admin API only |
+| Local dispatcher | `nats://<LAN address>:4222` | `reader-<owner>` NKey (plain TCP connections only) | read its org's consumers only |
+| Cloud dispatcher | `wss://<nas domain>/nats` | `reader-<owner>` NKey (websocket connections only) | read its org's consumers only |
+
+There is no keyless LAN user: `no_auth_user` is removed, and a local dispatcher uses the same
+`reader-<owner>` key as a cloud one. An account cannot see another account's subjects or stream.
 
 - NKeys are made on the NAS with event-broker's `node scripts/nkey.js`, which prints the seed,
-  then the public key. Only public keys go in the server config, through `.env`. A key is revoked by removing its public key and reloading.
+  then the public key: two per allowed owner, eight in all. Only public keys go in the server
+  config, through `.env`. A key is revoked by removing its public key and reloading.
 - The cloud init script writes the seed to a file with `umask 077` and never echoes it. It sets
-  `EVENT_BROKER_URL`, plus `EVENT_BROKER_NKEY_FILE` (cloud only).
+  `EVENT_BROKER_URL` and `EVENT_BROKER_NKEY_FILE`. A local session sets both too, now that the LAN
+  needs a key.
 - No NAS details are committed: no LAN address, domain, key or secret. agent-config and
   event-broker are both public (Kade, 2026-10-24). They use placeholders such as
   `<LAN address>` and `<nas domain>`, and the real values live only in the NAS's `.env` and
   secrets files and in the dispatcher's environment.
-- Accepted risk: any device on the LAN can read the event stream (repository names, PR numbers,
-  branches, check results, and the `<owner>/tasks` issue numbers, label names and comment authors).
-  Guest and IoT devices stay on an isolated network.
+- Accepted risk: a device on the LAN holding a `reader-<owner>` key can read that org's event
+  stream (repository names, PR numbers, branches, check results, and the `<owner>/tasks` issue
+  numbers, label names and comment authors), and only that org's. Without a key a LAN device reads
+  nothing. Guest and IoT devices stay on an isolated network, and a reader key is kept like the
+  cloud one (Kade accepted the keyed LAN, 2026-10-25).
 
 ## 8. Build and open items
 
