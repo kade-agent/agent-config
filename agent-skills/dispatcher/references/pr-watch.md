@@ -127,13 +127,19 @@ away, before anything else in the wake routine:
 | `pull_request` closed, not merged | Your PR was closed unmerged: say why in BLOCKED, or reopen it if that was a mistake. |
 | `mergeable` `behind` | Merge `origin/main`, regenerate the generated files, re-run the gate, push. |
 | `mergeable` `dirty` | Merge `origin/main` and resolve by worker rule 7: hand-written files keep both sides' intent; generated files take main's version and are regenerated. |
-| failed `check_run` / `workflow_run` / `check_suite` | CI failed on `<check.name>` at `<sha>` (`<check.url>`): find the root cause and push a validated fix. |
+| failed `check_run` / `workflow_run` / `check_suite` (`conclusion` `failure`, `timed_out` or `action_required`) | CI failed on `<check.name>` at `<sha>` (`<check.url>`): find the root cause and push a validated fix. |
 | `pull_request_review` `changes_requested` | Read the review on `#<pr>` and answer it (worker prompt rule 9). |
+| `issues` `closed` on a task's sub-issue | Nothing to the worker. Check on the PR that it merged; then the task is finished. |
+| `issues` `labeled` by someone else | Nothing to the worker. Note it; act on an approval or a block. |
+| `issues` `reopened` | Nothing to the worker. Tell Kade. |
+| `issue_comment` `created` on a sub-issue, from the workers' account | Nothing to the worker. Read it with `gh issue view`; act only on a strict DONE or BLOCKED line or a lease. |
+| `pr.<n>.issue_comment` on a task's PR | Read it on the PR with gh, then act as for a review ask. |
 | `converted_to_draft` or `auto_merge_disabled` by someone else | Nothing to the worker. Tell Kade if the task's merge path changed. |
 
 A `mergeable` `clean`, a green check or a `push` to `main` needs no worker message. After a push
-to `main`, the receiver's `mergeable` events follow for every open PR on it. A failed check with
-`pr: null` on `main` means `main` is red: follow SKILL.md, 5. Watching, step 5.
+to `main`, the receiver's `mergeable` events follow for every open PR on it. A failed check (as
+defined above: `cancelled` and `skipped` are not) with `pr: null` on `main` means `main` is red:
+follow SKILL.md, 5. Watching, step 5.
 
 Then update the status table (SKILL.md, 5. Watching). A merge also runs the after-merge checks
 there. Conflicts between two open PRs are not in these events: the `git merge-tree` check
