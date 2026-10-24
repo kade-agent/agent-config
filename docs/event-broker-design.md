@@ -47,32 +47,41 @@ one dispatcher per org.
 
 ```
 worker pushes / merges ─▶ GitHub ─(App webhook, HMAC)─▶ receiver (Node, NAS)
-                                                     │  ├─ check signature, normalize, publish
+                                                     │  ├─ check signature and owner allowlist, normalize,
+                                                     │  │    publish on the owner's account
                                                      │  │    (JetStream msg id = delivery GUID)
                                                      │  └─ after a push to a base branch or a PR synchronize:
                                                      │       App installation token → open PRs' mergeable_state
                                                      │       (retry past "unknown") → publish "mergeable" on change
                                                      ▼
-                                   NATS JetStream, stream GITHUB (subjects github.>, 7 days, 2-min dedupe)
-                                      ├─ LAN    nats://<LAN address>:4222  no key, subscribe-only
-                                      └─ public wss://<nas domain>/nats    NKey, subscribe-only
+                                   NATS JetStream, one account per allowed owner, each with
+                                   stream GITHUB (github.<owner>.>, 7 days, 2-min dedupe)
+                                      ├─ LAN    nats://<LAN address>:4222  reader-<owner> NKey
+                                      └─ public wss://<nas domain>/nats    reader-<owner> NKey
                                                      ▼
-                           dispatcher Monitor: durable consumer "dispatcher" → SendMessage the worker
+                           dispatcher Monitor: its org's filtered consumer "dispatcher" → SendMessage the worker
 ```
 
 | Part | Where | Holds |
 |---|---|---|
-| GitHub App | installed on the stella-rain organization | read-only permissions; webhook URL and secret |
-| Receiver | NAS container, `kade-agent/event-broker` | App private key, webhook secret, receiver NKey seed |
-| NATS server | NAS container, same compose | JetStream file store; public NKeys only |
+| GitHub App | owned by kade-agent, installed on kade-agent and stella-rain so far; installable on any account | read-only permissions; webhook URL and secret |
+| Receiver | NAS container, `kade-agent/event-broker` | App private key, webhook secret, the owner allowlist, one `receiver-<owner>` NKey seed per account |
+| NATS server | NAS container, same compose | one account per owner, JetStream file store; public NKeys only |
 | Reverse proxy | NAS | TLS for `/github` (to the receiver) and `/nats` (websocket to NATS) |
-| Dispatcher | local or cloud Claude Code session | cloud only: the `cloud` NKey seed, in a file written by the init script |
+| Dispatcher | local or cloud Claude Code session, one per org | its org's `reader-<owner>` NKey seed, in a file (cloud: written by the init script) |
 
 The router forwards only 443, to the reverse proxy. The LAN port 4222 is bound to the NAS's LAN
 address and is never forwarded.
 
 ## 3. GitHub App
 
+- **Owner and installability:** the App is owned by kade-agent and can be installed on any
+  account. Read from the GitHub API on 2026-10-25: it is installed on kade-agent and stella-rain.
+  The receiver's owner allowlist, not the App's visibility, keeps other accounts out.
+- **Owner allowlist:** `kade-k8s-platform`, `kade-agent`, `stella-rain`, `star-resonance`. The
+  receiver reads `ALLOWED_OWNERS` (comma-separated, required) and compares `repository.owner.login`
+  case-insensitively. A delivery from any other owner is dropped with a log line, before it
+  publishes or starts a mergeability check.
 - **Permissions, all read-only:** Metadata, Pull requests, Checks, Actions, Contents, Issues.
 - **Webhook events:** `pull_request`, `check_suite`, `check_run`, `workflow_run`,
   `pull_request_review`, `push`, `issues`, `issue_comment`.
