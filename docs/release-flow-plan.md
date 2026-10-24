@@ -5,6 +5,9 @@
 - **Status:** **accepted** (2026-10-20, by Kade, in the merge of #95). Kade answered the open
   questions the same day (decisions 5 to 8). Section 6 is built step by step from here, each
   step one PR.
+- **Revision proposed 2026-10-24** (section 9): Candidate runs on `main`, so no `candidate/*`
+  branch is pushed at all, and a version already released becomes the next patch instead of
+  being refused. Accepted by Kade in the merge of its PR; until then sections 3 to 6 hold.
 - **Replaces:** the `rc` flow of `agent-skills/release-flow/SKILL.md` (Kade, 2026-10-18) and
   section 6 of `docs/global-rules-plan.md` where it describes the Release run on `rc`.
 - **Decided by Kade, 2026-10-20:**
@@ -255,3 +258,110 @@ None left; Kade answered all four on 2026-10-20:
   (rc numbering, the date skip, refusals); the rules and skill text in `repo.test.cjs`.
 - The workflows: YAML parses here; NOT VERIFIED until step 3 has run on GitHub, including one
   deliberately failed Candidate to see the branch deleted, and one push the guard undoes.
+
+## 9. Revision: Candidate on `main`, the next patch for a released version (proposed 2026-10-24)
+
+Kade asked (2026-10-24) for a candidate that always exists for `main`'s latest commit, and for
+a Candidate run on a version that is already released to make a new release instead of being
+refused. His example: `main` and the latest release are both `0.0.5`, `main` gets new commits,
+and Candidate should still make something.
+
+### 9.1 The candidate is `main` itself
+
+A `candidate/<sha>` branch that always follows `main`'s head is a copy of `main`. The branch
+existed so that Kade does not type a SHA (decision 2) and the commit he releases is fixed. A
+`workflow_dispatch` run on `main` gives both:
+
+- `main` is the default branch, so the Actions dropdown, in the GitHub app too, already has it
+  selected: Kade clicks Run, nothing else.
+- `GITHUB_SHA` is fixed when he clicks. Candidate tags that commit and makes `rc/<rc tag>` at
+  its release commit; Promote releases only that, as today. A push to `main` during the run
+  changes nothing: the run keeps its commit, which is on `main`.
+- What Kade tries is still what users get: the rc tag, not the branch he clicked, is the record.
+
+**What goes:** `auto-candidate.yml`; the `candidate/**` half of `candidate-guard.yml` (its `rc/**`
+half stays); `release.cjs check-candidate` and the "no other candidate branch" refusal; step 2 of
+the skill, decision 5 (cloud sessions push `candidate/*`) and section 4a. Agents then push
+nothing outside `claude/*` and `agent/*`, which also ends the refused cloud pushes that 4a was
+built around.
+
+**What Candidate checks instead**, all on `GITHUB_SHA`:
+
+- it runs on `refs/heads/main`, nothing else;
+- every check run on the commit has finished and none failed (`checks-passed`, unchanged; a
+  refusal because checks are still running is run again later, as today);
+- there is something to release: agent-config, a file deployed to `~/.claude` changed since the
+  latest release (`should-candidate`, moved here from auto-candidate); a repository with a
+  version file, at least one commit since the latest final tag's `main` commit;
+- the commit is not already a candidate (the existing "already a candidate" refusal).
+
+**The notes Kade reads before clicking** move from the agent's message about the branch to the
+run itself: the summary of the run lists what `main` brings since the latest release, grouped by
+PR, with the commits' `NOT VERIFIED` lines. An agent asked for a release still writes the same
+message, naming `main` at the commit it read.
+
+### 9.2 The version: the next patch once a version is released
+
+The version file on `main` becomes the **floor**, not the version itself. With `V` the version
+in the file and `L` the latest final `v*` tag:
+
+| `V` against `L` | The release | Example (`L` = `v0.0.5`) |
+|---|---|---|
+| `V` above `L` | `V` | file `0.1.0` gives `v0.1.0-rc.N` |
+| `V` equal to or below `L` | `L` with its patch number plus one | file `0.0.5` gives `v0.0.6-rc.N` |
+| no `L` yet | `V` | first release |
+
+`N` is one more than that version's highest rc tag, as today, so a second Candidate before
+Promote makes `v0.0.6-rc.2`. A minor or major release still needs a version PR (step 1 of the
+skill); a patch release needs none.
+
+**Candidate stamps the version** into the release commit, whose parent is the `main` commit, as
+agent-config already stamps line 1 of `AGENTS.md`: the version file and every file that repeats
+it (`Cargo.toml` with `Cargo.lock`, `package.json` with its lock file, `tauri.conf.json`), named
+in each repository's own plan. It builds after the stamp, so section 5a holds: the binary
+carries the final version and never knows it is a candidate.
+
+**Why not `0.0.5-fix.1`**, the form Kade first named: in SemVer a suffix after `-` is a
+prerelease, which sorts below the version without it (`0.0.5-fix.1 < 0.0.5`). Updaters and the
+signed feed would treat it as older than `0.0.5` and offer it to nobody already on it; Windows
+file and installer versions take numbers only; GitHub and every SemVer sort would keep `0.0.5`
+as the latest. Build metadata (`0.0.5+fix.1`) is ignored by version order altogether, and a
+fourth number (`0.0.5.1`) is not SemVer and most updaters ignore it. A new patch number is what
+semantic-release, release-please and Changesets do for the same case.
+
+**agent-config** changes only in 9.1: its version is already computed (`vYYYY.MM.DD`, `.2` later
+the same day), so it is never "already released".
+
+**The cost:** `main`'s version file can lag the latest release (`0.0.5` on `main` while
+`v0.0.7` is out). A local build from `main` then says `0.0.5`; it is a development build, and the
+release's version is in its tag. Writing the version back to `main` would need a workflow that
+pushes to `main` or opens a PR after every Promote; this plan proposes neither (open question 1).
+
+### 9.3 Steps (each its own PR, after this revision is accepted)
+
+1. **This revision**, accepted by Kade in the merge.
+2. **agent-config, test-first:** `release.cjs` (the `main`-only check, `should-candidate` used by
+   Candidate, `check-candidate` removed); `candidate.yml` on `main`; `auto-candidate.yml` and the
+   `candidate/**` half of `candidate-guard.yml` removed; README; the `release-flow` skill and its
+   tests in `repo.test.cjs`, so the skill never describes a flow that is not built yet.
+3. **First run** on agent-config: Candidate from `main` in the GitHub app, one refusal on a
+   commit whose checks have not finished, then Promote.
+4. **code-quality-assurance:** the daily report no longer lists left-over `candidate/*` branches.
+5. **Each repository with a numeric version** (its own session and plan): `release.cjs next`
+   learns the floor rule of 9.2 with tests, Candidate stamps that repository's version files,
+   and its rules say the file is the floor.
+
+### 9.4 Open questions
+
+1. Should `main`'s version file follow the releases? Recommended: no. The tag is the version;
+   a workflow that writes to `main` is a new writer that branch has never had.
+2. Should a repository with a version file also refuse a Candidate when only docs changed
+   since the latest release, as agent-config does with `deploy-exclude`? Recommended: decide in
+   each repository's plan, with "at least one commit" as the default.
+
+### 9.5 How it is tested
+
+- `node --test`: the floor rule against real git repositories with tags (`V` above, equal to
+  and below `L`, no `L`, a second rc), the `main`-only refusal and "nothing to release", in
+  `release.test.cjs`; the skill text in `repo.test.cjs`.
+- The workflows: NOT VERIFIED until step 3 has run on GitHub.
