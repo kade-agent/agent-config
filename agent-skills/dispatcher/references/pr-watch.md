@@ -45,7 +45,7 @@ session:
 
 ```bash
 d="$HOME/.claude/dispatcher"; mkdir -p "$d"
-curl -fsSL -o "$d/watch.sh" https://raw.githubusercontent.com/kade-agent/event-broker/a05aa5840fd79f886cb890ae55435d32b6e40da3/client/watch.sh
+curl -fsSL -o "$d/watch.sh" https://raw.githubusercontent.com/kade-agent/event-broker/132276d9cb17d3759acfdc87a8ce365bd6ac98e4/client/watch.sh
 ```
 
 Then run `bash "$HOME/.claude/dispatcher/watch.sh"` as the `Monitor` command. Each line it prints
@@ -139,7 +139,7 @@ The cloud environment's settings:
 - **Network access:** allows `<nats host>`.
 - **Setup script:** installs the pinned CLI and nothing else:
   ```bash
-  curl -fsSL https://raw.githubusercontent.com/kade-agent/event-broker/a05aa5840fd79f886cb890ae55435d32b6e40da3/client/install-nats.sh | bash
+  curl -fsSL https://raw.githubusercontent.com/kade-agent/event-broker/132276d9cb17d3759acfdc87a8ce365bd6ac98e4/client/install-nats.sh | bash
   ```
 
 A setup script cannot see the environment's variables, so it never writes the seed. Instead,
