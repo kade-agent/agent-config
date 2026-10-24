@@ -33,49 +33,51 @@ Each message is one JSON object, on a subject such as `github.stella-rain.app.pr
 Settings come from the environment, never from an event:
 
 - `EVENT_BROKER_URL`: on the LAN, `nats://<LAN address>:4222`. From the cloud,
-  `wss://<nas domain>/nats`.
-- `EVENT_BROKER_NKEY_FILE`: cloud only. It is the file holding the `cloud` NKey seed. The local
-  session sets no key: the LAN listener needs none.
+  `wss://<nats host>`.
+- `EVENT_BROKER_NKEY_FILE` and `EVENT_BROKER_CLOUD_SEED`: cloud only, the key file's path and
+  the `cloud` seed. The local session sets neither: the LAN listener needs no key.
 
 No NAS detail goes into a repository: this one and event-broker are public. The values live only
-in the session's environment and, for cloud sessions, the environment's private init script.
+in the session's environment.
 
-The subscriber is the `nats` CLI. Run this as the `Monitor` command; each line it prints is one
-event:
+The watch is event-broker's `client/watch.sh`, pinned to a reviewed commit. Fetch it once per
+session:
 
 ```bash
-d="$HOME/.claude/dispatcher"; mkdir -p "$d"; echo $$ > "$d/watch.pid"
-key=(); [ -n "$EVENT_BROKER_NKEY_FILE" ] && key=(--nkey "$EVENT_BROKER_NKEY_FILE")
-fails=0
-while [ "$(cat "$d/watch.pid")" = "$$" ]; do             # a newer instance owns the watch
-  if out=$(nats --server "$EVENT_BROKER_URL" "${key[@]}" consumer next GITHUB dispatcher --raw --count 1 --wait 60s 2>&1); then
-    echo "$out"; fails=0
-  else
-    case "$out" in
-      *timeout*|*"no message"*) fails=0 ;;                 # quiet minute, not an outage
-      *) fails=$((fails + 1)); [ "$fails" -ge 2 ] && { echo "BROKER-DOWN $out"; exit 1; } ;;
-    esac
-  fi
-done
+d="$HOME/.claude/dispatcher"; mkdir -p "$d"
+curl -fsSL -o "$d/watch.sh" https://raw.githubusercontent.com/kade-agent/event-broker/a05aa5840fd79f886cb890ae55435d32b6e40da3/client/watch.sh
 ```
 
+Then run `bash "$HOME/.claude/dispatcher/watch.sh"` as the `Monitor` command. Each line it prints
+is one event, or `BROKER-DOWN <why>` just before it exits. It loops on
+`consumer next GITHUB dispatcher`, one message per call with a 60 s wait. A quiet minute is not
+an outage; two failures in a row are.
+
 - **Resume.** `dispatcher` is a durable consumer, so the server remembers what was acked, and
-  the next arm continues after it. There is no state file. `consumer next` acks each message as
-  it reads it. A message lost between the ack and the print is caught by the gh sweep below.
+  the next arm continues after it. There is no state file. An event that was pulled but never
+  acked comes back after the 60 s ack wait, with the same `delivery` GUID. Treat a GUID you have
+  already handled as a repeat. A message lost between the ack and the print is caught by the gh
+  sweep below.
 - **Re-arm.** A Monitor lasts at most 30 minutes. Re-arm about every 25 minutes, and at once when
   it ends or prints `BROKER-DOWN`. On every re-arm, run one gh sweep of the open PRs in your
   table, to catch anything the broker never received: GitHub does not retry a failed delivery.
-- **Single instance.** The pidfile guard above means the newest instance wins: an older loop
-  left running by an expired Monitor exits on its next pass. Never run two watches at once.
+- **Single instance.** `watch.sh` writes its process id to the pidfile `~/.claude/dispatcher/watch.pid`
+  (`WATCH_PIDFILE`), and the newest instance wins: an older loop left running by an expired
+  Monitor exits on its next pass. Never run two watches at once. A test watch sets its own
+  `WATCH_PIDFILE`.
 - **One dispatcher.** The local and the cloud dispatcher share the durable consumer
   `dispatcher`, and JetStream splits its messages among every reader. So one dispatcher reads
-  the consumer at a time. A second dispatcher, local or cloud, uses the gh-poll fallback.
-- **The CLI.** The `nats` CLI must be on `PATH`. On Windows, `nats.exe` comes from the natscli
-  GitHub releases (`nats-<version>-windows-amd64.zip`), with its folder added to the user's
-  `PATH`; Git Bash finds it there. In the cloud, the environment's setup script installs it.
-- **Checked live** (Kade, 2026-10-24, on the LAN with no key): the loop's
-  `consumer next GITHUB dispatcher --raw --count 1 --wait` printed a real stella-rain/app
-  `workflow_run` event as one JSON line.
+  the consumer at a time. A second dispatcher, local or cloud, uses the gh-poll fallback. Any
+  test that reads the consumer takes events away from the dispatcher.
+- **The CLI.** `watch.sh` runs the `nats` CLI, natscli 0.5.0. On Windows, `nats.exe` comes from
+  `nats-0.5.0-windows-amd64.zip` in the natscli releases, with its folder on the user's `PATH`,
+  and the app restarted. (`NATS_BIN` can point to it directly.) In the cloud, the setup script
+  installs it (below).
+- **Checked live** (2026-10-24):
+  - on Kade's PC, over the LAN with no key, the consumer gave a real stella-rain/app
+    `workflow_run` and acked it;
+  - event-broker's CI ran `watch.sh` against nats-server over the LAN with no key, and over
+    websocket with the seed written from the variable.
 
 ## The gh-poll fallback
 
@@ -84,7 +86,8 @@ as a `Monitor` command:
 
 - Every 60 s, run `gh pr list` on each queue repository for `claude/*` PRs.
 - Print one line when a PR changes to merged, closed, `DIRTY`, `BEHIND`, or a failed check.
-- It uses the same `watch.pid` guard (the first line of the loop) and its own state file.
+- It uses the same `watch.pid` pidfile as `watch.sh`. It writes its process id there first, and
+  exits once the file holds another one. It keeps its own state file.
 - The re-arm rule is the same. On each re-arm, try the broker first.
 
 Report each switch between broker and poll to Kade in one line.
@@ -114,28 +117,32 @@ there. Conflicts between two open PRs are not in these events: the `git merge-tr
 
 ## Cloud sessions
 
-The cloud environment holds three settings as environment variables, so every command sees them
-without a shell profile:
+The cloud environment's settings:
 
-- `EVENT_BROKER_URL=wss://<nas domain>`: the NAS reverse proxy forwards it, with the WebSocket
-  headers, to NATS's websocket port.
-- `EVENT_BROKER_NKEY_FILE=/root/.event-broker.nk`.
-- `EVENT_BROKER_CLOUD_SEED`: the `cloud` seed. It is read-only on the broker, and is revoked by
-  replacing `CLOUD_NKEY` on the NAS.
+- **Variables:** `EVENT_BROKER_URL=wss://<nats host>`,
+  `EVENT_BROKER_NKEY_FILE=/root/.event-broker.nk`, and `EVENT_BROKER_CLOUD_SEED` (the `cloud`
+  seed: read-only on the broker, revoked by replacing `CLOUD_NKEY` on the NAS).
+- **Network access:** allows `<nats host>`.
+- **Setup script:** installs the pinned CLI and nothing else:
+  ```bash
+  curl -fsSL https://raw.githubusercontent.com/kade-agent/event-broker/a05aa5840fd79f886cb890ae55435d32b6e40da3/client/install-nats.sh | bash
+  ```
 
-Its network access must allow the NAS domain. Its setup script installs the `nats` CLI and writes
-the seed file without echoing it:
+A setup script cannot see the environment's variables, so it never writes the seed. Instead,
+`watch.sh` writes the key file from `EVENT_BROKER_CLOUD_SEED` when the watch starts, at mode 600,
+and never prints it. The CLI version is pinned because the GitHub "latest release" API answers
+403 from the sandbox.
+
+To check the path without taking an event:
 
 ```bash
-v=$(curl -fsSL https://api.github.com/repos/nats-io/natscli/releases/latest | sed -n 's/.*"tag_name": *"v\([^"]*\)".*/\1/p')
-curl -fsSL -o /tmp/nats.zip "https://github.com/nats-io/natscli/releases/download/v$v/nats-$v-linux-amd64.zip"
-unzip -oq /tmp/nats.zip -d /tmp/natscli && install "/tmp/natscli/nats-$v-linux-amd64/nats" /usr/local/bin/nats
-umask 077 && printf '%s\n' "$EVENT_BROKER_CLOUD_SEED" > "$EVENT_BROKER_NKEY_FILE"
+nats --server "$EVENT_BROKER_URL" --nkey "$EVENT_BROKER_NKEY_FILE" consumer info GITHUB dispatcher
 ```
 
-To check it, run `nats --server "$EVENT_BROKER_URL" --nkey "$EVENT_BROKER_NKEY_FILE" consumer
-info GITHUB dispatcher`. It only reads metadata, so it consumes no event.
+Run it after the first watch has written the key file.
 
-NOT VERIFIED: a cloud session reaching the NAS domain through the sandbox's proxy, and the
-release asset name in the setup script. Until a cloud session has connected, a cloud dispatcher
-uses the gh-poll fallback.
+NOT VERIFIED: a real cloud session running `watch.sh` through the sandbox's proxy. Until one has,
+a cloud dispatcher uses the gh-poll fallback.
+
+To move to a newer `watch.sh` or `install-nats.sh`, merge it in event-broker first, then change
+the commit in both links above in an agent-config PR.
