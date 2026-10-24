@@ -183,7 +183,7 @@ What this cannot see, and what covers it:
 | `docker compose run --rm setup`: both NKeys, secrets, `.env`, file owners | event-broker #3 | merged 2026-10-24 |
 | `client/watch.sh` (the cloud seed written at run time) and `client/install-nats.sh` (natscli 0.5.0, pinned) | event-broker #4 | merged 2026-10-24 |
 | `pr-watch.md` runs `client/watch.sh` at a pinned event-broker commit | agent-config, `claude/pr-watch-client-script` | open |
-| `--timeout 60s`, no `--wait` (event-broker #5) | agent-config #<this PR> | open |
+| `--timeout 60s`, no `--wait` (event-broker #5) | agent-config #121 | open |
 | The cloud websocket route and the cloud environment (variables, network, setup script) | Kade | next |
 
 **Settled:**
