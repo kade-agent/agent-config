@@ -379,3 +379,34 @@ test("the dispatcher skill says how it watches PR events and tells the worker at
   const worker = fs.readFileSync(path.join(dir, "references", "worker-prompt.md"), "utf8");
   assert.match(worker, /message from the dispatcher about your PR is a wake/, "worker rule 9 counts it as a wake");
 });
+
+// Task lanes (Kade, 2026-10-24 and 2026-10-25, issue #118): each lane is a queue issue in the
+// org's private `<owner>/tasks` repository with one sub-issue per task, and each plan is a file at
+// a pinned sha. State lives in the issues and their `status:` labels, so the status comment goes;
+// workers hold leases, and a task that stalls twice goes to Kade.
+test("the dispatcher runs lanes of sub-issues in <owner>/tasks with plans as files", () => {
+  const dir = path.join(ROOT, "agent-skills", "dispatcher");
+  const skill = fs.readFileSync(path.join(dir, "SKILL.md"), "utf8").replace(/\s+/g, " ");
+  for (const p of ["`<owner>/tasks`", "sub-issue", "global session cap", "never falls back to a public repository",
+    "`plans/<lane>/<task>.md`", "pinned sha", "`Blocked by: #<n>`", "`<!-- task:<id> -->`", "plan shas",
+    "`status:planned`", "`status:approved`", "`status:running`", "`status:blocked`", "goes back to `status:planned`",
+    "`Closes <owner>/tasks#<n>`", "rebuilt from the issues", "lease", "delivery GUID", "labelled `follow-up`",
+    "workers' account", "references/plan-template.md"]) {
+    assert.ok(skill.includes(p), `SKILL.md says: ${p}`);
+  }
+  assert.ok(!skill.includes("edited after each event"), "the status comment is gone: state is rebuilt from the issues");
+  const prompt = fs.readFileSync(path.join(dir, "references", "worker-prompt.md"), "utf8").replace(/\s+/g, " ");
+  for (const p of ["plan at the pinned sha", "`main` moved on in your files", "lease comment",
+    "`Closes <owner>/tasks#<n>`", "sub-issue comment"]) {
+    assert.ok(prompt.includes(p), `the worker prompt says: ${p}`);
+  }
+  const template = path.join(dir, "references", "plan-template.md");
+  assert.ok(fs.existsSync(template), "references/plan-template.md exists");
+  const plan = fs.readFileSync(template, "utf8");
+  for (const h of ["## Goal", "## Values", "## Steps", "## Files", "## Tests first", "## Placeholders", "## Gate",
+    "## DONE line"]) {
+    assert.ok(plan.includes(h), `the plan template has the worker-prompt slot ${h}`);
+  }
+  const watch = fs.readFileSync(path.join(dir, "references", "pr-watch.md"), "utf8").replace(/\s+/g, " ");
+  assert.ok(watch.includes("poll the lanes' sub-issues"), "pr-watch.md polls the sub-issues until the broker sends issue events");
+});
