@@ -253,6 +253,7 @@ There is no keyless LAN user: `no_auth_user` is removed, and a local dispatcher 
 | EB8-allow: the receiver's `ALLOWED_OWNERS` allowlist | event-broker | open |
 | EB8-accounts: accounts, per-org streams, keys and filtered consumers in `nats-server.conf` and the setup | event-broker | open |
 | EB8-watch: the dispatcher's watch uses its org's `reader-<owner>` key | agent-config | open |
+| pr-watch, worker-prompt and this section on the 2026-10-25 live checks (EB10-docs) | agent-config #PR | open |
 | New keys and redeploy | Kade | open |
 | The App: Issues read, `issues` and `issue_comment` subscriptions, installed on each `<owner>/tasks`; receiver redeploy | Kade | next |
 | The cloud websocket route and the cloud environment (variables, network, setup script) | Kade | next |
@@ -276,6 +277,12 @@ There is no keyless LAN user: `no_auth_user` is removed, and a local dispatcher 
   the earlier "private to stella-rain" reading.
 - The local and the cloud dispatcher of one org share its consumer `dispatcher`, so one reads it at
   a time (`pr-watch.md`); each org has its own.
+- (2026-10-25) Three checks are settled:
+  - the cloud websocket route, and a cloud session through the sandbox: a cloud session ran
+    `watch.sh` with the stella-rain reader key and received `issue_comment`, `issues` `closed` and a
+    `workflow_run` on `main` within seconds (Kade's cloud run);
+  - `mergeable` events from real pushes: seen live on stella-rain/core #358, `unstable` then `clean`;
+  - a watch drains a backlog in seconds: 21 queued events printed at once with the fixed `watch.sh`.
 
 **Open:**
 - Whether `kade-agent/event-broker` needs a profile in `kade-agent/code-quality-assurance`.
@@ -283,7 +290,3 @@ There is no keyless LAN user: `no_auth_user` is removed, and a local dispatcher 
   - a cloud environment's setup script cannot see the environment's variables, so
     `client/watch.sh` writes the seed file when the watch starts;
   - the GitHub "latest release" API answers 403 from the sandbox, so the CLI is pinned.
-- NOT VERIFIED: the cloud websocket route, and a cloud session reaching it through the sandbox's
-  proxy.
-- NOT VERIFIED: a `mergeable` event from a real push to `main`.
-- NOT VERIFIED: a watch drains a backlog in seconds (event-broker #5 step 4), after EB5-fix.
