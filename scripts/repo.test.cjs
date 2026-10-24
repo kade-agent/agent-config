@@ -362,7 +362,10 @@ test("the dispatcher skill says how it watches PR events and tells the worker at
     "docs/event-broker-design.md"]) {
     assert.ok(watch.includes(needle), `pr-watch.md names ${needle}`);
   }
-  for (const gone of ["Last-Event-ID", "EVENT_BROKER_TOKEN_FILE", "broker.last-id"]) {
+  // Kade's first live test (2026-10-24): local and cloud share consumer "dispatcher", so two
+  // dispatchers at once would split the events; a Monitor command may not read ~/.bashrc.
+  assert.ok(watch.includes("one dispatcher reads the consumer at a time"), "pr-watch.md: one dispatcher at a time");
+  for (const gone of ["Last-Event-ID", "EVENT_BROKER_TOKEN_FILE", "broker.last-id", ".bashrc"]) {
     assert.ok(!watch.includes(gone), `pr-watch.md no longer names the SSE design's ${gone}`);
   }
   assert.doesNotMatch(watch, /[?&](token|access_token|auth)=/, "no token in a URL");

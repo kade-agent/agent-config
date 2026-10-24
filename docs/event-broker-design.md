@@ -175,8 +175,10 @@ What this cannot see, and what covers it:
 | SSE receiver, the first design | event-broker #1 | merged 2026-10-24; replaced by #2 |
 | Receiver + NATS config + compose + CI with an integration job + README | event-broker #2 | merged 2026-10-24 |
 | No LAN address in this public doc | agent-config #112 | merged 2026-10-24 |
-| `pr-watch.md` on the NATS consumer, the new event rows, the init-script snippet; this doc's subjects | agent-config, `claude/pr-watch-nats` | open |
-| Create the App, install it, make the keys, deploy, proxy routes; install the `nats` CLI | Kade, on GitHub, the NAS and the PC | next |
+| `pr-watch.md` on the NATS consumer, the new event rows, the init-script snippet; this doc's subjects | agent-config #113 | merged 2026-10-24 |
+| Create the App (private, on stella-rain), install it, make the keys, deploy, the webhook route; install the `nats` CLI on the PC | Kade | done 2026-10-24 |
+| One dispatcher at a time; cloud settings as environment variables; the live check | agent-config, `claude/pr-watch-verified` | open |
+| The cloud websocket route and the cloud environment | Kade | next |
 
 **Settled:**
 - The two runtime dependencies `@nats-io/transport-node` and `@nats-io/jetstream` (3.4.0, pinned)
@@ -184,8 +186,20 @@ What this cannot see, and what covers it:
 - `no_auth_user` reaches plain TCP connections only. event-broker #2's integration job proves it
   against nats-server 2.15.1: a websocket connection without a key is refused, and each key is
   refused on the wrong connection type.
+- **The LAN path works end to end** (Kade, 2026-10-24). The App's ping got a 200 over the NAS
+  domain. A real stella-rain/app `workflow_run` reached JetStream, and the PC read it with
+  `nats consumer next GITHUB dispatcher --raw --count 1 --wait 120s`, with no key.
+- Deploy lessons:
+  - The certificate is a one-level wildcard, so every public hostname is one level deep.
+  - The secret files must be owned by uid 1000, the container's `node` user.
+  - `.env` holds public NKeys (`U…`, 56 characters), never seeds (`SU…`).
+- The App is private to stella-rain ("Only on this account"), so the receiver needs no owner
+  allowlist. Making it installable elsewhere would need one first.
+- The local and the cloud dispatcher share consumer `dispatcher`, so one reads it at a time
+  (`pr-watch.md`).
 
 **Open:**
 - Whether `kade-agent/event-broker` needs a profile in `kade-agent/code-quality-assurance`.
-- NOT VERIFIED until deployed: a live delivery, the proxy routes, a cloud session reaching the
-  domain, and the `nats consumer next` flags in `pr-watch.md` against the live broker.
+- NOT VERIFIED: the cloud websocket route, and a cloud session reaching it through the sandbox's
+  proxy.
+- NOT VERIFIED: a `mergeable` event from a real push to `main`.
