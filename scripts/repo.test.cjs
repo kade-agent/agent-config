@@ -365,7 +365,13 @@ test("the dispatcher skill says how it watches PR events and tells the worker at
   // Kade's first live test (2026-10-24): local and cloud share consumer "dispatcher", so two
   // dispatchers at once would split the events; a Monitor command may not read ~/.bashrc.
   assert.ok(watch.includes("one dispatcher reads the consumer at a time"), "pr-watch.md: one dispatcher at a time");
-  for (const gone of ["Last-Event-ID", "EVENT_BROKER_TOKEN_FILE", "broker.last-id", ".bashrc"]) {
+  // event-broker#4: the loop and the cloud seed live in its client/watch.sh, pinned to a commit; a
+  // cloud setup script cannot see the environment's variables, and the "latest" API answers 403.
+  assert.match(watch, /raw\.githubusercontent\.com\/kade-agent\/event-broker\/[0-9a-f]{40}\/client\/watch\.sh/,
+    "pr-watch.md fetches client/watch.sh at a pinned commit");
+  assert.ok(watch.includes("client/install-nats.sh"), "pr-watch.md installs the CLI with client/install-nats.sh");
+  for (const gone of ["Last-Event-ID", "EVENT_BROKER_TOKEN_FILE", "broker.last-id", ".bashrc", "releases/latest",
+    "consumer next GITHUB dispatcher --raw"]) {
     assert.ok(!watch.includes(gone), `pr-watch.md no longer names the SSE design's ${gone}`);
   }
   assert.doesNotMatch(watch, /[?&](token|access_token|auth)=/, "no token in a URL");
