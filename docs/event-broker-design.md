@@ -249,7 +249,7 @@ There is no keyless LAN user: `no_auth_user` is removed, and a local dispatcher 
 | `pr-watch.md` runs `client/watch.sh` at a pinned event-broker commit | agent-config, `claude/pr-watch-client-script` | open |
 | `--timeout 60s`, no `--wait` (event-broker #5) | agent-config #121 | open |
 | Issue events (event-broker #7): this doc, then `normalize`, then the dispatcher | agent-config #122 | open |
-| This doc: one account per org, the owner allowlist, keyed LAN | agent-config #PR | open |
+| This doc: one account per org, the owner allowlist, keyed LAN | agent-config #124 | open |
 | EB8-allow: the receiver's `ALLOWED_OWNERS` allowlist | event-broker | open |
 | EB8-accounts: accounts, per-org streams, keys and filtered consumers in `nats-server.conf` and the setup | event-broker | open |
 | EB8-watch: the dispatcher's watch uses its org's `reader-<owner>` key | agent-config | open |
