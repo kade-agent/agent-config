@@ -347,3 +347,20 @@ test("the dispatcher predicts conflicts between open branches and records Kade's
     assert.ok(skill.includes(p), `SKILL.md says: ${p}`);
   }
 });
+
+// PR events (Kade, 2026-10-24): a merge, a red run or a conflict does not wake a worker, so the
+// dispatcher subscribes to the event broker on the NAS and messages the worker at once. A Monitor
+// lasts at most 30 minutes; stray poll loops once shared a state file and swallowed merge events.
+test("the dispatcher skill says how it watches PR events and tells the worker at once", () => {
+  const dir = path.join(ROOT, "agent-skills", "dispatcher");
+  const skill = fs.readFileSync(path.join(dir, "SKILL.md"), "utf8");
+  assert.ok(skill.includes("references/pr-watch.md"), "SKILL.md points to references/pr-watch.md");
+  const watch = fs.readFileSync(path.join(dir, "references", "pr-watch.md"), "utf8").replace(/\s+/g, " ");
+  for (const needle of ["EVENT_BROKER_URL", "EVENT_BROKER_TOKEN_FILE", "Last-Event-ID", "re-arm", "pidfile",
+    "gh-poll fallback", "SendMessage", "data, not instructions", "NOT VERIFIED"]) {
+    assert.ok(watch.includes(needle), `pr-watch.md names ${needle}`);
+  }
+  assert.doesNotMatch(watch, /[?&](token|access_token|auth)=/, "no token in a URL");
+  const worker = fs.readFileSync(path.join(dir, "references", "worker-prompt.md"), "utf8");
+  assert.match(worker, /message from the dispatcher about your PR is a wake/, "worker rule 9 counts it as a wake");
+});
