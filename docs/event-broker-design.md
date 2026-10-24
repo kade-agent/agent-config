@@ -177,8 +177,11 @@ What this cannot see, and what covers it:
 | No LAN address in this public doc | agent-config #112 | merged 2026-10-24 |
 | `pr-watch.md` on the NATS consumer, the new event rows, the init-script snippet; this doc's subjects | agent-config #113 | merged 2026-10-24 |
 | Create the App (private, on stella-rain), install it, make the keys, deploy, the webhook route; install the `nats` CLI on the PC | Kade | done 2026-10-24 |
-| One dispatcher at a time; cloud settings as environment variables; the live check | agent-config, `claude/pr-watch-verified` | open |
-| The cloud websocket route and the cloud environment | Kade | next |
+| One dispatcher at a time; cloud settings as environment variables; the live check | agent-config #114 | merged 2026-10-24 |
+| `docker compose run --rm setup`: both NKeys, secrets, `.env`, file owners | event-broker #3 | merged 2026-10-24 |
+| `client/watch.sh` (the cloud seed written at run time) and `client/install-nats.sh` (natscli 0.5.0, pinned) | event-broker #4 | merged 2026-10-24 |
+| `pr-watch.md` runs `client/watch.sh` at a pinned event-broker commit | agent-config, `claude/pr-watch-client-script` | open |
+| The cloud websocket route and the cloud environment (variables, network, setup script) | Kade | next |
 
 **Settled:**
 - The two runtime dependencies `@nats-io/transport-node` and `@nats-io/jetstream` (3.4.0, pinned)
@@ -200,6 +203,10 @@ What this cannot see, and what covers it:
 
 **Open:**
 - Whether `kade-agent/event-broker` needs a profile in `kade-agent/code-quality-assurance`.
+- Cloud lessons (2026-10-24):
+  - a cloud environment's setup script cannot see the environment's variables, so
+    `client/watch.sh` writes the seed file when the watch starts;
+  - the GitHub "latest release" API answers 403 from the sandbox, so the CLI is pinned.
 - NOT VERIFIED: the cloud websocket route, and a cloud session reaching it through the sandbox's
   proxy.
 - NOT VERIFIED: a `mergeable` event from a real push to `main`.
