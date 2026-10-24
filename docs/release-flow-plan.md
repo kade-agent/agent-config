@@ -335,7 +335,7 @@ the same day), so it is never "already released".
 **The cost:** `main`'s version file can lag the latest release (`0.0.5` on `main` while
 `v0.0.7` is out). A local build from `main` then says `0.0.5`; it is a development build, and the
 release's version is in its tag. Writing the version back to `main` would need a workflow that
-pushes to `main` or opens a PR after every Promote; this plan proposes neither (open question 1).
+pushes to `main` or opens a PR after every Promote; Kade chose neither (decision 1 of 9.4).
 
 ### 9.3 Steps (each its own PR, after this revision is accepted)
 
@@ -351,13 +351,12 @@ pushes to `main` or opens a PR after every Promote; this plan proposes neither (
    learns the floor rule of 9.2 with tests, Candidate stamps that repository's version files,
    and its rules say the file is the floor.
 
-### 9.4 Open questions
+### 9.4 Decisions (Kade, 2026-10-24)
 
-1. Should `main`'s version file follow the releases? Recommended: no. The tag is the version;
-   a workflow that writes to `main` is a new writer that branch has never had.
-2. Should a repository with a version file also refuse a Candidate when only docs changed
-   since the latest release, as agent-config does with `deploy-exclude`? Recommended: decide in
-   each repository's plan, with "at least one commit" as the default.
+1. `main`'s version file does **not** follow the releases. The tag is the version; no workflow
+   writes to `main`, which keeps it a branch only PRs change.
+2. Whether a docs-only change counts as something to release is decided in each repository's
+   plan (step 5), with "at least one commit since the latest release" as the default.
 
 ### 9.5 How it is tested
 
