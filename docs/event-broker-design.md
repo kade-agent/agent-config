@@ -249,15 +249,20 @@ There is no keyless LAN user: `no_auth_user` is removed, and a local dispatcher 
 | `pr-watch.md` runs `client/watch.sh` at a pinned event-broker commit | agent-config, `claude/pr-watch-client-script` | open |
 | `--timeout 60s`, no `--wait` (event-broker #5) | agent-config #121 | open |
 | Issue events (event-broker #7): this doc, then `normalize`, then the dispatcher | agent-config #122 | open |
+| This doc: one account per org, the owner allowlist, keyed LAN | agent-config #PR | open |
+| EB8-allow: the receiver's `ALLOWED_OWNERS` allowlist | event-broker | open |
+| EB8-accounts: accounts, per-org streams, keys and filtered consumers in `nats-server.conf` and the setup | event-broker | open |
+| EB8-watch: the dispatcher's watch uses its org's `reader-<owner>` key | agent-config | open |
+| New keys and redeploy | Kade | open |
 | The App: Issues read, `issues` and `issue_comment` subscriptions, installed on each `<owner>/tasks`; receiver redeploy | Kade | next |
 | The cloud websocket route and the cloud environment (variables, network, setup script) | Kade | next |
 
 **Settled:**
 - The two runtime dependencies `@nats-io/transport-node` and `@nats-io/jetstream` (3.4.0, pinned)
   were approved by Kade on 2026-10-24. Their upkeep is npm updates.
-- `no_auth_user` reaches plain TCP connections only. event-broker #2's integration job proves it
-  against nats-server 2.15.1: a websocket connection without a key is refused, and each key is
-  refused on the wrong connection type.
+- (2026-10-24, removed 2026-10-25) `no_auth_user` reached plain TCP connections only. With a key
+  on the LAN it is gone (section 7); each key stays refused on the wrong connection type, as
+  event-broker #2's integration job proved against nats-server 2.15.1.
 - **The LAN path works end to end** (Kade, 2026-10-24). The App's ping got a 200 over the NAS
   domain. A real stella-rain/app `workflow_run` reached JetStream, and the PC read it with
   `nats consumer next GITHUB dispatcher --raw --count 1 --wait 120s`, with no key. That `--wait`
@@ -266,10 +271,11 @@ There is no keyless LAN user: `no_auth_user` is removed, and a local dispatcher 
   - The certificate is a one-level wildcard, so every public hostname is one level deep.
   - The secret files must be owned by uid 1000, the container's `node` user.
   - `.env` holds public NKeys (`U…`, 56 characters), never seeds (`SU…`).
-- The App is private to stella-rain ("Only on this account"), so the receiver needs no owner
-  allowlist. Making it installable elsewhere would need one first.
-- The local and the cloud dispatcher share consumer `dispatcher`, so one reads it at a time
-  (`pr-watch.md`).
+- The App is owned by kade-agent and installable on any account (read from the GitHub API,
+  2026-10-25), and the receiver's owner allowlist of four keeps other accounts out. This replaces
+  the earlier "private to stella-rain" reading.
+- The local and the cloud dispatcher of one org share its consumer `dispatcher`, so one reads it at
+  a time (`pr-watch.md`); each org has its own.
 
 **Open:**
 - Whether `kade-agent/event-broker` needs a profile in `kade-agent/code-quality-assurance`.
