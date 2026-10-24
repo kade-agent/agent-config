@@ -23,7 +23,7 @@
    private init script.
 5. **Cloud auth is a NAS-made private key, with no token:** an NKey, which is an Ed25519 keypair.
    The broker keeps only the public key.
-6. **Local sessions connect over the LAN with no key.** That access comes from a
+6. **Local sessions connect over the LAN with no key.** (Changed 2026-10-25: a key is needed now, see decision 11 and section 7.) That access comes from a
    separate listener that is not exposed, never from a source-IP check.
 7. **Only the dispatcher subscribes**, and it manages the workers. Workers do not subscribe.
 8. **The receiver detects behind and conflicting PRs** by asking GitHub after each trigger
@@ -194,7 +194,7 @@ What this cannot see, and what covers it:
   The receiver still publishes every kept event (section 4 is unchanged). The filters drop
   `check_run`, `check_suite` and runs on branches with no PR other than `workflow_run`. The
   Monitor reads it with
-  `nats consumer next GITHUB dispatcher --raw --count 1 --timeout 60s`, one message per call, and
+  `nats consumer next GITHUB dispatcher --raw --count 1 --timeout 60s` (with the org's `reader-<owner>` key, EB8-watch), one message per call, and
   the CLI acks each message as it reads it. Never `--wait`: natscli 0.5.0 sleeps a random 0 to D
   before the ack (event-broker #5). When a Monitor ends (30 minutes at most), the next one
   resumes after the last ack.
