@@ -33,6 +33,16 @@
 10. **The GitHub identity is a new read-only GitHub App.** It is both the webhook source and the
     API reader.
 
+**Added 2026-10-25 (Kade):**
+
+11. **One NATS account per org, with a filtered consumer per org** to cut noise. Kade: "plan them,
+    one account per org". Each account holds its own stream, keys and consumer (sections 6 and 7).
+12. **The receiver accepts only Kade's owners:** "kade-k8s-platform, kade-agent, stella-rain,
+    star-resonance". A delivery from any other owner is dropped (section 3).
+
+Decision 6 changes with decision 11: LAN access needs a key now (section 7). Decision 7 stays, with
+one dispatcher per org.
+
 ## 2. Architecture
 
 ```
