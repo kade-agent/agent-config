@@ -67,8 +67,15 @@ done
   table, to catch anything the broker never received: GitHub does not retry a failed delivery.
 - **Single instance.** The pidfile guard above means the newest instance wins: an older loop
   left running by an expired Monitor exits on its next pass. Never run two watches at once.
-- **The CLI.** The `nats` CLI must be on `PATH`: install it once on the PC, and in the cloud
-  init script.
+- **One dispatcher.** The local and the cloud dispatcher share the durable consumer
+  `dispatcher`, and JetStream splits its messages among every reader. So one dispatcher reads
+  the consumer at a time. A second dispatcher, local or cloud, uses the gh-poll fallback.
+- **The CLI.** The `nats` CLI must be on `PATH`. On Windows, `nats.exe` comes from the natscli
+  GitHub releases (`nats-<version>-windows-amd64.zip`), with its folder added to the user's
+  `PATH`; Git Bash finds it there. In the cloud, the environment's setup script installs it.
+- **Checked live** (Kade, 2026-10-24, on the LAN with no key): the loop's
+  `consumer next GITHUB dispatcher --raw --count 1 --wait` printed a real stella-rain/app
+  `workflow_run` event as one JSON line.
 
 ## The gh-poll fallback
 
@@ -107,18 +114,28 @@ there. Conflicts between two open PRs are not in these events: the `git merge-tr
 
 ## Cloud sessions
 
-The cloud environment's private init script installs the `nats` CLI and writes the `cloud` seed
-to a file. It never echoes the seed:
+The cloud environment holds three settings as environment variables, so every command sees them
+without a shell profile:
+
+- `EVENT_BROKER_URL=wss://<nas domain>`: the NAS reverse proxy forwards it, with the WebSocket
+  headers, to NATS's websocket port.
+- `EVENT_BROKER_NKEY_FILE=/root/.event-broker.nk`.
+- `EVENT_BROKER_CLOUD_SEED`: the `cloud` seed. It is read-only on the broker, and is revoked by
+  replacing `CLOUD_NKEY` on the NAS.
+
+Its network access must allow the NAS domain. Its setup script installs the `nats` CLI and writes
+the seed file without echoing it:
 
 ```bash
-umask 077
-printf '%s\n' "$EVENT_BROKER_CLOUD_SEED" > "$HOME/.event-broker.nk"
-echo "export EVENT_BROKER_URL=$EVENT_BROKER_CLOUD_URL EVENT_BROKER_NKEY_FILE=$HOME/.event-broker.nk" >> "$HOME/.bashrc"
+v=$(curl -fsSL https://api.github.com/repos/nats-io/natscli/releases/latest | sed -n 's/.*"tag_name": *"v\([^"]*\)".*/\1/p')
+curl -fsSL -o /tmp/nats.zip "https://github.com/nats-io/natscli/releases/download/v$v/nats-$v-linux-amd64.zip"
+unzip -oq /tmp/nats.zip -d /tmp/natscli && install "/tmp/natscli/nats-$v-linux-amd64/nats" /usr/local/bin/nats
+umask 077 && printf '%s\n' "$EVENT_BROKER_CLOUD_SEED" > "$EVENT_BROKER_NKEY_FILE"
 ```
 
-Here `EVENT_BROKER_CLOUD_SEED` and `EVENT_BROKER_CLOUD_URL` are the environment's secrets. This
-is NOT VERIFIED until a cloud session has been shown to reach the NAS domain. Until then, a cloud
-dispatcher uses the gh-poll fallback.
+To check it, run `nats --server "$EVENT_BROKER_URL" --nkey "$EVENT_BROKER_NKEY_FILE" consumer
+info GITHUB dispatcher`. It only reads metadata, so it consumes no event.
 
-NOT VERIFIED: the `nats consumer next` flags above against a live broker. The CLI is not
-installed on Kade's PC yet; the first armed watch checks them.
+NOT VERIFIED: a cloud session reaching the NAS domain through the sandbox's proxy, and the
+release asset name in the setup script. Until a cloud session has connected, a cloud dispatcher
+uses the gh-poll fallback.
