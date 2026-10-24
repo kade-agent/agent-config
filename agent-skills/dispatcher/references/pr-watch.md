@@ -77,8 +77,12 @@ failures in a row are.
   table, to catch anything the broker never received: GitHub does not retry a failed delivery.
 - **Single instance.** `watch.sh` writes its process id to the pidfile `~/.claude/dispatcher/watch.pid`
   (`WATCH_PIDFILE`), and the newest instance wins: an older loop left running by an expired
-  Monitor exits on its next pass. Never run two watches at once. A test watch sets its own
+  Monitor exits on its next pass. Never run two watches of one org at once. A test watch sets its own
   `WATCH_PIDFILE`.
+- **Several orgs on one machine.** Each org's watch sets its own `WATCH_PIDFILE`, for example
+  `~/.claude/dispatcher/watch-<owner>.pid`, and its own `EVENT_BROKER_NKEY_FILE`. With the default
+  pidfile one org's watch ends the other's:
+  `EVENT_BROKER_NKEY_FILE=… WATCH_PIDFILE=… bash "$HOME/.claude/dispatcher/watch.sh"`.
 - **One dispatcher per org.** Each dispatcher reads its own org's account and its consumer
   `dispatcher`. Two dispatchers of the same org, local and cloud, still share that consumer, and
   JetStream splits its messages among every reader. So one dispatcher reads the consumer at a
@@ -185,8 +189,9 @@ nats --server "$EVENT_BROKER_URL" --nkey "$EVENT_BROKER_NKEY_FILE" consumer info
 Run it after the first watch has written the key file. On the LAN it works the same way, with
 `EVENT_BROKER_URL` the LAN address and the key file of the `reader-<owner>` seed.
 
-NOT VERIFIED: a real cloud session running `watch.sh` through the sandbox's proxy. Until one has,
-a cloud dispatcher uses the gh-poll fallback.
+Verified live 2026-10-25: a cloud session ran `watch.sh` over websocket with the stella-rain reader
+key and received `issue_comment`, `issues` `closed` and a `workflow_run` on `main` within seconds. A
+cloud dispatcher uses the broker like a local one.
 
 To move to a newer `watch.sh` or `install-nats.sh`, merge it in event-broker first, then change
 the commit in both links above in an agent-config PR.
