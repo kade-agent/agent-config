@@ -23,7 +23,7 @@
    private init script.
 5. **Cloud auth is a NAS-made private key, with no token:** an NKey, which is an Ed25519 keypair.
    The broker keeps only the public key.
-6. **Local sessions connect over the LAN with no key.** That access comes from a
+6. **Local sessions connect over the LAN with no key.** (Changed 2026-10-25: a key is needed now, see decision 11 and section 7.) That access comes from a
    separate listener that is not exposed, never from a source-IP check.
 7. **Only the dispatcher subscribes**, and it manages the workers. Workers do not subscribe.
 8. **The receiver detects behind and conflicting PRs** by asking GitHub after each trigger
@@ -33,36 +33,55 @@
 10. **The GitHub identity is a new read-only GitHub App.** It is both the webhook source and the
     API reader.
 
+**Added 2026-10-25 (Kade):**
+
+11. **One NATS account per org, with a filtered consumer per org** to cut noise. Kade: "plan them,
+    one account per org". Each account holds its own stream, keys and consumer (sections 6 and 7).
+12. **The receiver accepts only Kade's owners:** "kade-k8s-platform, kade-agent, stella-rain,
+    star-resonance". A delivery from any other owner is dropped (section 3).
+
+Decision 6 changes with decision 11: LAN access needs a key now (section 7). Decision 7 stays, with
+one dispatcher per org.
+
 ## 2. Architecture
 
 ```
 worker pushes / merges ─▶ GitHub ─(App webhook, HMAC)─▶ receiver (Node, NAS)
-                                                     │  ├─ check signature, normalize, publish
+                                                     │  ├─ check signature and owner allowlist, normalize,
+                                                     │  │    publish on the owner's account
                                                      │  │    (JetStream msg id = delivery GUID)
                                                      │  └─ after a push to a base branch or a PR synchronize:
                                                      │       App installation token → open PRs' mergeable_state
                                                      │       (retry past "unknown") → publish "mergeable" on change
                                                      ▼
-                                   NATS JetStream, stream GITHUB (subjects github.>, 7 days, 2-min dedupe)
-                                      ├─ LAN    nats://<LAN address>:4222  no key, subscribe-only
-                                      └─ public wss://<nas domain>/nats    NKey, subscribe-only
+                                   NATS JetStream, one account per allowed owner, each with
+                                   stream GITHUB (github.<owner>.>, 7 days, 2-min dedupe)
+                                      ├─ LAN    nats://<LAN address>:4222  reader-<owner> NKey
+                                      └─ public wss://<nas domain>/nats    reader-<owner> NKey
                                                      ▼
-                           dispatcher Monitor: durable consumer "dispatcher" → SendMessage the worker
+                           dispatcher Monitor: its org's filtered consumer "dispatcher" → SendMessage the worker
 ```
 
 | Part | Where | Holds |
 |---|---|---|
-| GitHub App | installed on the stella-rain organization | read-only permissions; webhook URL and secret |
-| Receiver | NAS container, `kade-agent/event-broker` | App private key, webhook secret, receiver NKey seed |
-| NATS server | NAS container, same compose | JetStream file store; public NKeys only |
+| GitHub App | owned by kade-agent, installed on kade-agent and stella-rain so far; installable on any account | read-only permissions; webhook URL and secret |
+| Receiver | NAS container, `kade-agent/event-broker` | App private key, webhook secret, the owner allowlist, one `receiver-<owner>` NKey seed per account |
+| NATS server | NAS container, same compose | one account per owner, JetStream file store; public NKeys only |
 | Reverse proxy | NAS | TLS for `/github` (to the receiver) and `/nats` (websocket to NATS) |
-| Dispatcher | local or cloud Claude Code session | cloud only: the `cloud` NKey seed, in a file written by the init script |
+| Dispatcher | local or cloud Claude Code session, one per org | its org's `reader-<owner>` NKey seed, in a file (cloud: written by the init script) |
 
 The router forwards only 443, to the reverse proxy. The LAN port 4222 is bound to the NAS's LAN
 address and is never forwarded.
 
 ## 3. GitHub App
 
+- **Owner and installability:** the App is owned by kade-agent and can be installed on any
+  account. Read from the GitHub API on 2026-10-25: it is installed on kade-agent and stella-rain.
+  The receiver's owner allowlist, not the App's visibility, keeps other accounts out.
+- **Owner allowlist:** `kade-k8s-platform`, `kade-agent`, `stella-rain`, `star-resonance`. The
+  receiver reads `ALLOWED_OWNERS` (comma-separated, required) and compares `repository.owner.login`
+  case-insensitively. A delivery from any other owner is dropped with a log line, before it
+  publishes or starts a mergeability check.
 - **Permissions, all read-only:** Metadata, Pull requests, Checks, Actions, Contents, Issues.
 - **Webhook events:** `pull_request`, `check_suite`, `check_run`, `workflow_run`,
   `pull_request_review`, `push`, `issues`, `issue_comment`.
@@ -161,15 +180,27 @@ What this cannot see, and what covers it:
 
 ## 6. Durability and the dispatcher's watch
 
-- **The stream:** `GITHUB`, file storage, subjects `github.>`, kept for 7 days, with a 2-minute
-  duplicate window keyed by the delivery GUID.
-- **The consumer:** a durable consumer named `dispatcher`, with explicit acks, new messages only
-  and a 60 s ack wait. The Monitor reads it with
-  `nats consumer next GITHUB dispatcher --raw --count 1 --timeout 60s`, one message per call, and
+- **The stream:** one per account, each named `GITHUB`, file storage, subjects `github.<owner>.>`,
+  kept for 7 days, with a 2-minute duplicate window keyed by the delivery GUID.
+- **The consumer:** a durable consumer named `dispatcher` in each account, with explicit acks, new
+  messages only, a 60 s ack wait and these `filter_subjects` (`<owner>` is the account):
+  - `github.<owner>.*.pr.*.pull_request`, `github.<owner>.*.pr.*.workflow_run`,
+    `github.<owner>.*.pr.*.mergeable`, `github.<owner>.*.pr.*.pull_request_review`,
+    `github.<owner>.*.pr.*.issue_comment`;
+  - `github.<owner>.*.issue.>`;
+  - `github.<owner>.*.branch.*.workflow_run`;
+  - `github.<owner>.*.push.*`.
+
+  The receiver still publishes every kept event (section 4 is unchanged). The filters drop
+  `check_run`, `check_suite` and runs on branches with no PR other than `workflow_run`. The
+  Monitor reads it with
+  `nats consumer next GITHUB dispatcher --raw --count 1 --timeout 60s` (with the org's `reader-<owner>` key, EB8-watch), one message per call, and
   the CLI acks each message as it reads it. Never `--wait`: natscli 0.5.0 sleeps a random 0 to D
   before the ack (event-broker #5). When a Monitor ends (30 minutes at most), the next one
   resumes after the last ack.
-- **Single instance:** the dispatcher's pidfile guard stays, so only the newest watch runs.
+- **Single instance:** the dispatcher's pidfile guard stays, so only the newest watch runs. There
+  is one dispatcher per org, each reading its own org's consumer; dispatchers of different orgs no
+  longer share one consumer.
 - **Backstop:** on every re-arm, the dispatcher runs one gh sweep of its open PRs. This catches
   deliveries lost while the NAS was down.
 - **Fallback:** when the broker cannot be reached, the 60 s gh poll runs, as in `pr-watch.md`.
@@ -179,21 +210,28 @@ What this cannot see, and what covers it:
 | Who | Connects to | Proves itself with | May |
 |---|---|---|---|
 | GitHub | `https://<nas domain>/github` | HMAC with the webhook secret | send deliveries |
-| Receiver | NATS, inside compose | `receiver` NKey | publish `github.>` only |
-| Local dispatcher | `nats://<LAN address>:4222` | nothing (`no_auth_user`, plain TCP connections only) | subscribe and consume `GITHUB` only |
-| Cloud dispatcher | `wss://<nas domain>/nats` | `cloud` NKey (websocket connections only) | subscribe and consume `GITHUB` only |
+| Receiver | NATS, inside compose, one connection per account | `receiver-<owner>` NKey | publish `github.<owner>.>` and that stream's admin API only |
+| Local dispatcher | `nats://<LAN address>:4222` | `reader-<owner>` NKey (plain TCP connections only) | read its org's consumers only |
+| Cloud dispatcher | `wss://<nas domain>/nats` | `reader-<owner>` NKey (websocket connections only) | read its org's consumers only |
+
+There is no keyless LAN user: `no_auth_user` is removed, and a local dispatcher uses the same
+`reader-<owner>` key as a cloud one. An account cannot see another account's subjects or stream.
 
 - NKeys are made on the NAS with event-broker's `node scripts/nkey.js`, which prints the seed,
-  then the public key. Only public keys go in the server config, through `.env`. A key is revoked by removing its public key and reloading.
+  then the public key: two per allowed owner, eight in all. Only public keys go in the server
+  config, through `.env`. A key is revoked by removing its public key and reloading.
 - The cloud init script writes the seed to a file with `umask 077` and never echoes it. It sets
-  `EVENT_BROKER_URL`, plus `EVENT_BROKER_NKEY_FILE` (cloud only).
+  `EVENT_BROKER_URL` and `EVENT_BROKER_NKEY_FILE`. A local session sets both too, now that the LAN
+  needs a key.
 - No NAS details are committed: no LAN address, domain, key or secret. agent-config and
   event-broker are both public (Kade, 2026-10-24). They use placeholders such as
   `<LAN address>` and `<nas domain>`, and the real values live only in the NAS's `.env` and
   secrets files and in the dispatcher's environment.
-- Accepted risk: any device on the LAN can read the event stream (repository names, PR numbers,
-  branches, check results, and the `<owner>/tasks` issue numbers, label names and comment authors).
-  Guest and IoT devices stay on an isolated network.
+- Accepted risk: a device on the LAN holding a `reader-<owner>` key can read that org's event
+  stream (repository names, PR numbers, branches, check results, and the `<owner>/tasks` issue
+  numbers, label names and comment authors), and only that org's. Without a key a LAN device reads
+  nothing. Guest and IoT devices stay on an isolated network, and a reader key is kept like the
+  cloud one (Kade accepted the keyed LAN, 2026-10-25).
 
 ## 8. Build and open items
 
@@ -211,15 +249,20 @@ What this cannot see, and what covers it:
 | `pr-watch.md` runs `client/watch.sh` at a pinned event-broker commit | agent-config, `claude/pr-watch-client-script` | open |
 | `--timeout 60s`, no `--wait` (event-broker #5) | agent-config #121 | open |
 | Issue events (event-broker #7): this doc, then `normalize`, then the dispatcher | agent-config #122 | open |
+| This doc: one account per org, the owner allowlist, keyed LAN | agent-config #124 | open |
+| EB8-allow: the receiver's `ALLOWED_OWNERS` allowlist | event-broker | open |
+| EB8-accounts: accounts, per-org streams, keys and filtered consumers in `nats-server.conf` and the setup | event-broker | open |
+| EB8-watch: the dispatcher's watch uses its org's `reader-<owner>` key | agent-config | open |
+| New keys and redeploy | Kade | open |
 | The App: Issues read, `issues` and `issue_comment` subscriptions, installed on each `<owner>/tasks`; receiver redeploy | Kade | next |
 | The cloud websocket route and the cloud environment (variables, network, setup script) | Kade | next |
 
 **Settled:**
 - The two runtime dependencies `@nats-io/transport-node` and `@nats-io/jetstream` (3.4.0, pinned)
   were approved by Kade on 2026-10-24. Their upkeep is npm updates.
-- `no_auth_user` reaches plain TCP connections only. event-broker #2's integration job proves it
-  against nats-server 2.15.1: a websocket connection without a key is refused, and each key is
-  refused on the wrong connection type.
+- (2026-10-24, removed 2026-10-25) `no_auth_user` reached plain TCP connections only. With a key
+  on the LAN it is gone (section 7); each key stays refused on the wrong connection type, as
+  event-broker #2's integration job proved against nats-server 2.15.1.
 - **The LAN path works end to end** (Kade, 2026-10-24). The App's ping got a 200 over the NAS
   domain. A real stella-rain/app `workflow_run` reached JetStream, and the PC read it with
   `nats consumer next GITHUB dispatcher --raw --count 1 --wait 120s`, with no key. That `--wait`
@@ -228,10 +271,11 @@ What this cannot see, and what covers it:
   - The certificate is a one-level wildcard, so every public hostname is one level deep.
   - The secret files must be owned by uid 1000, the container's `node` user.
   - `.env` holds public NKeys (`U…`, 56 characters), never seeds (`SU…`).
-- The App is private to stella-rain ("Only on this account"), so the receiver needs no owner
-  allowlist. Making it installable elsewhere would need one first.
-- The local and the cloud dispatcher share consumer `dispatcher`, so one reads it at a time
-  (`pr-watch.md`).
+- The App is owned by kade-agent and installable on any account (read from the GitHub API,
+  2026-10-25), and the receiver's owner allowlist of four keeps other accounts out. This replaces
+  the earlier "private to stella-rain" reading.
+- The local and the cloud dispatcher of one org share its consumer `dispatcher`, so one reads it at
+  a time (`pr-watch.md`); each org has its own.
 
 **Open:**
 - Whether `kade-agent/event-broker` needs a profile in `kade-agent/code-quality-assurance`.
