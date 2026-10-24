@@ -210,6 +210,8 @@ What this cannot see, and what covers it:
 | `client/watch.sh` (the cloud seed written at run time) and `client/install-nats.sh` (natscli 0.5.0, pinned) | event-broker #4 | merged 2026-10-24 |
 | `pr-watch.md` runs `client/watch.sh` at a pinned event-broker commit | agent-config, `claude/pr-watch-client-script` | open |
 | `--timeout 60s`, no `--wait` (event-broker #5) | agent-config #121 | open |
+| Issue events (event-broker #7): this doc, then `normalize`, then the dispatcher | agent-config #122 | open |
+| The App: Issues read, `issues` and `issue_comment` subscriptions, installed on each `<owner>/tasks`; receiver redeploy | Kade | next |
 | The cloud websocket route and the cloud environment (variables, network, setup script) | Kade | next |
 
 **Settled:**
