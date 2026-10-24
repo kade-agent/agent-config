@@ -76,6 +76,8 @@ Auto-merge merges a worker's PR when it is green, with no other review, so each 
 
 **When a task is finished.** Only when its DONE has arrived **and** its PR is merged. A draft PR for Kade is finished when its CI is green.
 
+**PR events.** While any task has a PR, keep one PR watch running, as `references/pr-watch.md` says. It subscribes to the NAS event broker, or falls back to a gh poll, with a single-instance guard and a re-arm before 30 minutes. A merge, a conflict or a red run sends the worker a `SendMessage` at once.
+
 **On every wake.** A wake is a worker's message, Kade's message, or a check-in:
 1. Read the notifications. Act on each DONE or BLOCKED.
 2. For every open task, check:
