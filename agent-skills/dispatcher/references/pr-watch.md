@@ -8,18 +8,18 @@ gh poll takes over. Only the dispatcher subscribes; workers never do.
 
 ## The event
 
-Each message is one JSON object, on a subject such as `github.stella-rain.app.pr.341.check_run`:
+Each message is one JSON object, on a subject such as `github.stella-rain.app.pr.341.workflow_run`:
 
 ```json
 {"delivery": "1f2e…", "repo": "stella-rain/app", "pr": 341, "branch": "claude/z3-orbs",
- "event": "check_run", "action": "completed", "merged": null, "draft": false, "auto_merge": true,
+ "event": "workflow_run", "action": "completed", "merged": null, "draft": false, "auto_merge": true,
  "conclusion": "failure", "check": {"name": "test", "url": "https://github.com/…"},
  "mergeable_state": null, "sha": "9f2c1e0"}
 ```
 
 - `event` is one of:
   - `pull_request`: closed, ready_for_review, converted_to_draft, auto_merge_enabled or auto_merge_disabled;
-  - `check_suite`, `check_run` or `workflow_run`: completed;
+  - `check_suite`, `check_run` or `workflow_run`: completed. The receiver publishes all three, but the filtered consumer delivers only `workflow_run` (see Filtered below);
   - `pull_request_review`: submitted, with the review state in `conclusion`;
   - `push`: to the default branch;
   - `mergeable`: made by the receiver when a PR's `mergeable_state` changes to `clean`, `behind`, `dirty`, `blocked` or `unstable`.
@@ -139,7 +139,7 @@ away, before anything else in the wake routine:
 | `pull_request` closed, not merged | Your PR was closed unmerged: say why in BLOCKED, or reopen it if that was a mistake. |
 | `mergeable` `behind` | Merge `origin/main`, regenerate the generated files, re-run the gate, push. |
 | `mergeable` `dirty` | Merge `origin/main` and resolve by worker rule 7: hand-written files keep both sides' intent; generated files take main's version and are regenerated. |
-| failed `check_run` / `workflow_run` / `check_suite` (`conclusion` `failure`, `timed_out` or `action_required`) | CI failed on `<check.name>` at `<sha>` (`<check.url>`): find the root cause and push a validated fix. |
+| failed `workflow_run` (`conclusion` `failure`, `timed_out` or `action_required`) | CI failed on `<check.name>` at `<sha>` (`<check.url>`): find the root cause and push a validated fix. |
 | `pull_request_review` `changes_requested` | Read the review on `#<pr>` and answer it (worker prompt rule 9). |
 | `issues` `closed` on a task's sub-issue | Nothing to the worker. Check on the PR that it merged; then the task is finished. |
 | `issues` `labeled` by someone else | Nothing to the worker. Note it; act on an approval or a block. |
