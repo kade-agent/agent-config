@@ -8,18 +8,18 @@ gh poll takes over. Only the dispatcher subscribes; workers never do.
 
 ## The event
 
-Each message is one JSON object, on a subject such as `github.stella-rain.app.pr.341.check_run`:
+Each message is one JSON object, on a subject such as `github.stella-rain.app.pr.341.workflow_run`:
 
 ```json
 {"delivery": "1f2e…", "repo": "stella-rain/app", "pr": 341, "branch": "claude/z3-orbs",
- "event": "check_run", "action": "completed", "merged": null, "draft": false, "auto_merge": true,
+ "event": "workflow_run", "action": "completed", "merged": null, "draft": false, "auto_merge": true,
  "conclusion": "failure", "check": {"name": "test", "url": "https://github.com/…"},
  "mergeable_state": null, "sha": "9f2c1e0"}
 ```
 
 - `event` is one of:
   - `pull_request`: closed, ready_for_review, converted_to_draft, auto_merge_enabled or auto_merge_disabled;
-  - `check_suite`, `check_run` or `workflow_run`: completed;
+  - `check_suite`, `check_run` or `workflow_run`: completed. The receiver publishes all three, but the filtered consumer delivers only `workflow_run` (see Filtered below);
   - `pull_request_review`: submitted, with the review state in `conclusion`;
   - `push`: to the default branch;
   - `mergeable`: made by the receiver when a PR's `mergeable_state` changes to `clean`, `behind`, `dirty`, `blocked` or `unstable`.
@@ -77,8 +77,12 @@ failures in a row are.
   table, to catch anything the broker never received: GitHub does not retry a failed delivery.
 - **Single instance.** `watch.sh` writes its process id to the pidfile `~/.claude/dispatcher/watch.pid`
   (`WATCH_PIDFILE`), and the newest instance wins: an older loop left running by an expired
-  Monitor exits on its next pass. Never run two watches at once. A test watch sets its own
+  Monitor exits on its next pass. Never run two watches of one org at once. A test watch sets its own
   `WATCH_PIDFILE`.
+- **Several orgs on one machine.** Each org's watch sets its own `WATCH_PIDFILE`, for example
+  `~/.claude/dispatcher/watch-<owner>.pid`, and its own `EVENT_BROKER_NKEY_FILE`. With the default
+  pidfile one org's watch ends the other's:
+  `EVENT_BROKER_NKEY_FILE=… WATCH_PIDFILE=… bash "$HOME/.claude/dispatcher/watch.sh"`.
 - **One dispatcher per org.** Each dispatcher reads its own org's account and its consumer
   `dispatcher`. Two dispatchers of the same org, local and cloud, still share that consumer, and
   JetStream splits its messages among every reader. So one dispatcher reads the consumer at a
@@ -139,7 +143,7 @@ away, before anything else in the wake routine:
 | `pull_request` closed, not merged | Your PR was closed unmerged: say why in BLOCKED, or reopen it if that was a mistake. |
 | `mergeable` `behind` | Merge `origin/main`, regenerate the generated files, re-run the gate, push. |
 | `mergeable` `dirty` | Merge `origin/main` and resolve by worker rule 7: hand-written files keep both sides' intent; generated files take main's version and are regenerated. |
-| failed `check_run` / `workflow_run` / `check_suite` (`conclusion` `failure`, `timed_out` or `action_required`) | CI failed on `<check.name>` at `<sha>` (`<check.url>`): find the root cause and push a validated fix. |
+| failed `workflow_run` (`conclusion` `failure`, `timed_out` or `action_required`) | CI failed on `<check.name>` at `<sha>` (`<check.url>`): find the root cause and push a validated fix. |
 | `pull_request_review` `changes_requested` | Read the review on `#<pr>` and answer it (worker prompt rule 9). |
 | `issues` `closed` on a task's sub-issue | Nothing to the worker. Check on the PR that it merged; then the task is finished. |
 | `issues` `labeled` by someone else | Nothing to the worker. Note it; act on an approval or a block. |
@@ -185,8 +189,9 @@ nats --server "$EVENT_BROKER_URL" --nkey "$EVENT_BROKER_NKEY_FILE" consumer info
 Run it after the first watch has written the key file. On the LAN it works the same way, with
 `EVENT_BROKER_URL` the LAN address and the key file of the `reader-<owner>` seed.
 
-NOT VERIFIED: a real cloud session running `watch.sh` through the sandbox's proxy. Until one has,
-a cloud dispatcher uses the gh-poll fallback.
+Verified live 2026-10-25: a cloud session ran `watch.sh` over websocket with the stella-rain reader
+key and received `issue_comment`, `issues` `closed` and a `workflow_run` on `main` within seconds. A
+cloud dispatcher uses the broker like a local one.
 
 To move to a newer `watch.sh` or `install-nats.sh`, merge it in event-broker first, then change
 the commit in both links above in an agent-config PR.

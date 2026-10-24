@@ -20,6 +20,16 @@ HARD RULES
 TASK <task id> — <goal in one sentence>. Sub-issue: <owner>/tasks#<n>. Plan: <plans/<lane>/<task>.md link at the pinned sha> (its sections: Goal, Values, Steps, Files, Tests first, Placeholders, Gate, DONE line). Branch <claude/<task> branch, the session's outcome_branch> from up-to-date main<, or: continue the pushed branch <branch> at <sha>; first review what it holds>.
 ```
 
+## Cloud workers without `gh`
+
+A cloud session may have no `gh` (seen 2026-10-25). There the worker uses the GitHub connector
+tools for the same reads, comments and PR steps.
+
+NOT VERIFIED: a cloud worker reading and commenting on a sub-issue in a private `<owner>/tasks`
+that is not its session's repository. Until that is verified, the dispatcher pastes the plan
+file's text into a cloud worker's prompt under its pinned sha. The worker posts its lease and DONE
+line on the sub-issue if it can, and always sends the DONE line to the dispatcher.
+
 ## Options-doc variant (run on `decision_model`)
 
 Replace rules 5 to 10 and the TASK block with:

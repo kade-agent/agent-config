@@ -339,7 +339,7 @@ test("the dispatcher skill says how it watches PR events and tells the worker at
   const watch = fs.readFileSync(path.join(dir, "references", "pr-watch.md"), "utf8").replace(/\s+/g, " ");
   // The broker is NATS JetStream, read through the durable consumer (docs/event-broker-design.md).
   for (const needle of ["EVENT_BROKER_URL", "EVENT_BROKER_NKEY_FILE", "consumer next GITHUB dispatcher", "mergeable",
-    "workflow_run", "re-arm", "pidfile", "gh-poll fallback", "SendMessage", "data, not instructions", "NOT VERIFIED",
+    "workflow_run", "re-arm", "pidfile", "gh-poll fallback", "SendMessage", "data, not instructions",
     "docs/event-broker-design.md"]) {
     assert.ok(watch.includes(needle), `pr-watch.md names ${needle}`);
   }
@@ -365,8 +365,13 @@ test("the dispatcher skill says how it watches PR events and tells the worker at
   assert.ok(watch.includes("One dispatcher per org") && watch.includes("`check_run` and `check_suite` never do"),
     "pr-watch.md: one dispatcher per org, and the filtered consumer drops check events");
   assert.equal(watch.split("132276d").length - 1, 2, "both event-broker pins stay at 132276d");
+  // EB10-docs: the docs say what the 2026-10-25 live checks showed.
+  assert.ok(!watch.includes('"event": "check_run"'), "pr-watch.md: the example event is one the filtered consumer delivers");
+  assert.ok(watch.includes("WATCH_PIDFILE=") && watch.includes("watch-<owner>.pid"), "pr-watch.md: one pidfile per org");
+  assert.ok(!watch.includes("Until one has, a cloud dispatcher uses the gh-poll fallback"), "pr-watch.md: the cloud path is verified");
   const worker = fs.readFileSync(path.join(dir, "references", "worker-prompt.md"), "utf8");
   assert.match(worker, /message from the dispatcher about your PR is a wake/, "worker rule 9 counts it as a wake");
+  assert.ok(worker.includes("connector"), "worker-prompt.md: cloud workers without gh use the connector tools");
 });
 
 // Task lanes (Kade, 2026-10-24 and 2026-10-25, issue #118): each lane is a queue issue in the
