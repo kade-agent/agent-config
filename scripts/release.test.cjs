@@ -196,15 +196,15 @@ test("check-changes refuses with nothing to release, and lists what main brings 
   assert.strictEqual(release(dev, "check-changes"), "CLAUDE.md\n");
 });
 
-// A candidate that failed leaves its check runs on the main commit; a new candidate branch at the
+// A candidate that failed leaves its check runs on the main commit; a new Candidate run at the
 // same commit must not be refused for them, nor for a guard run of an earlier push there.
 test("checksPassed leaves out the candidate workflows' own jobs from any run", () => {
   const run = (name, conclusion, id) => ({ name, status: "completed", conclusion, details_url: `https://github.com/o/r/actions/runs/${id}/job/9` });
   assert.doesNotThrow(() => r.checksPassed([
     run("test", "success", 1),
     run("check, stamp and test", "failure", 2),
-    run("delete the candidate branch", "success", 2),
-    run("candidate branch unchanged", "failure", 3),
+    run("rc tag and prerelease", "success", 2),
+    run("rc branch unchanged", "failure", 3),
   ], "7"));
   assert.throws(() => r.checksPassed([run("check, stamp and test", "success", 2)], "7"), /no check run/);
 });
