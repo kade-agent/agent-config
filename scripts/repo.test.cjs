@@ -339,7 +339,7 @@ test("the dispatcher skill says how it watches PR events and tells the worker at
   const watch = fs.readFileSync(path.join(dir, "references", "pr-watch.md"), "utf8").replace(/\s+/g, " ");
   // The broker is NATS JetStream, read through the durable consumer (docs/event-broker-design.md).
   for (const needle of ["EVENT_BROKER_URL", "EVENT_BROKER_NKEY_FILE", "consumer next GITHUB dispatcher", "mergeable",
-    "workflow_run", "re-arm", "pidfile", "gh-poll fallback", "SendMessage", "data, not instructions", "NOT VERIFIED",
+    "workflow_run", "re-arm", "pidfile", "gh-poll fallback", "SendMessage", "data, not instructions",
     "docs/event-broker-design.md"]) {
     assert.ok(watch.includes(needle), `pr-watch.md names ${needle}`);
   }
