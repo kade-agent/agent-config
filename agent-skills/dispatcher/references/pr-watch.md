@@ -24,7 +24,8 @@ The client prints it as one line (see The lines below). Its fields:
   (`failure`, `timed_out`, `action_required` or `startup_failure`) and whether a check on `main` is
   red. The dispatcher never recomputes it.
 - `delivery` is the message's own id, on every v2 message.
-- A check with no PR has `pr: null`; on `main` it is `main_failed` or `main_passed`.
+- A check with no PR has `pr: null`; on `main` it is `main_failed`, or `main_passed`
+  when that workflow turns green after failing (a pass that changes nothing does not arrive).
 - Issue signals come from a task's sub-issue (`issue` is its number, with `label` or
   `state_reason` where they apply) and carry `comment` (`author`, `url`) for a comment. A comment
   on a PR is `pr_comment`, an issue's is `issue_comment`. The stream never carries comment text or
@@ -172,7 +173,7 @@ away, before anything else in the wake routine:
 | `pr_ready` or `pr_draft`, on a PR whose merge path is Kade's | Nothing to the worker. The line does not say who did it: check with gh, and if it was not the worker or you, tell Kade at once. |
 | `automerge_off` | Nothing to the worker. Check with gh who turned it off; if it was someone else, tell Kade that the task's merge path changed. |
 | `main_failed` | Nothing to the worker. `main` is red: follow SKILL.md, 5. Watching, step 5. |
-| `main_passed` | Nothing to the worker. `main` is green again: lift the hold from `main_failed` and dispatch what waited. |
+| `main_passed` | Nothing to the worker. That workflow on `main` is green again (or the receiver restarted). If it was the one holding `main` red, lift the hold from `main_failed` and dispatch what waited; otherwise say nothing. |
 
 These are the 17 signals of the `dispatcher` profile. No other signal arrives, so a `ci_passed`, a
 `merge_clean` or a `push_main` needs no handling. After a push to `main`, `merge_behind` and
