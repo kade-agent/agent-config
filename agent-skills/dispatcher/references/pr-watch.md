@@ -40,7 +40,7 @@ Install it once per pin, on the PC:
 
 ```bash
 d="$HOME/.claude/dispatcher/event-broker"
-[ -d "$d/.git" ] && git -C "$d" fetch origin || git clone https://github.com/kade-agent/event-broker "$d"
+if [ -d "$d/.git" ]; then git -C "$d" fetch origin; else git clone https://github.com/kade-agent/event-broker "$d"; fi
 git -C "$d" checkout --detach 72c07448cc43b805a8b8c787fee41d8ad0fe0e51
 npm ci --omit=dev --prefix "$d"
 ```
@@ -87,7 +87,8 @@ and the print.
 
 - **Exit codes** (what the dispatcher does):
   - 0, a quiet end with no line: a newer watch owns the pidfile, a signal arrived, or the parent
-    went away. Re-arm if the Monitor was not stopped on purpose.
+    went away. Re-arm if the Monitor was not stopped on purpose, unless another live dispatcher
+    of the org took the pidfile (one dispatcher per org, below): then use the gh poll.
   - 1, `BROKER-DOWN`: two failed connects 5 s apart, a disconnect over 120 s, two failed reads, or
     a key for another org's account. Re-arm at once; a second in a row means the gh poll.
   - 2, `BROKER-DOWN` for the settings (no URL, owner or key; a pidfile that cannot be written). The
@@ -165,11 +166,11 @@ away, before anything else in the wake routine:
 | `review_comment` | Read the review on the PR with gh. If it asks the worker for something, tell the worker (worker prompt rule 9); otherwise nothing. |
 | `pr_comment` | Read it on the PR with gh. If it asks the worker for something, tell the worker (worker prompt rule 9). |
 | `issue_closed` on a task's sub-issue | Nothing to the worker. Check on the PR that it merged; then the task is finished. |
-| `issue_labeled` by someone else | Nothing to the worker. Note it; act on an approval or a block. |
+| `issue_labeled` | Nothing to the worker. Check with gh who labeled it; if it was someone else, note it and act on an approval or a block. |
 | `issue_reopened` | Nothing to the worker. Tell Kade. |
 | `issue_comment` on a sub-issue, from the workers' account | Nothing to the worker. Read it with `gh issue view`; act only on a strict DONE or BLOCKED line or a lease. |
-| `pr_ready` or `pr_draft` by someone else, on a PR whose merge path is Kade's | Nothing to the worker. Tell Kade at once. |
-| `automerge_off` by someone else | Nothing to the worker. Tell Kade if the task's merge path changed. |
+| `pr_ready` or `pr_draft`, on a PR whose merge path is Kade's | Nothing to the worker. The line does not say who did it: check with gh, and if it was not the worker or you, tell Kade at once. |
+| `automerge_off` | Nothing to the worker. Check with gh who turned it off; if it was someone else, tell Kade that the task's merge path changed. |
 | `main_failed` | Nothing to the worker. `main` is red: follow SKILL.md, 5. Watching, step 5. |
 | `main_passed` | Nothing to the worker. `main` is green again: lift the hold from `main_failed` and dispatch what waited. |
 
