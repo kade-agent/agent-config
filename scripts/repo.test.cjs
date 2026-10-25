@@ -450,6 +450,9 @@ test("the dispatcher keeps its work items only in <owner>/tasks and relays the w
   const watch = fs.readFileSync(path.join(dir, "references", "pr-watch.md"), "utf8").replace(/\s+/g, " ");
   assert.ok(watch.includes("each task branch's last push") && watch.includes("starting with a strict DONE or BLOCKED line"),
     "pr-watch.md: the sweep reads task PR comments and last pushes; pr_comment carries DONE/BLOCKED");
+  // Decision 20 (S2): main events carry red=; the hold lifts on a main_passed with red=-.
+  assert.ok(watch.includes("With `red=-`, `main` is green") && watch.includes("`red`") && !watch.includes("(or the receiver restarted)"),
+    "pr-watch.md: main_passed lifts the hold on red=-, and the entry fields name red");
   assert.ok(!prompt.includes("Post the same line as a sub-issue comment"), "the worker does not post DONE itself");
   assert.ok(!prompt.includes("NOT VERIFIED: a cloud worker reading"), "the cloud-workers note records what was seen");
 });
