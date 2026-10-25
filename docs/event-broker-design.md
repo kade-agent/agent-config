@@ -40,6 +40,19 @@
 12. **The receiver accepts only Kade's owners:** "kade-k8s-platform, kade-agent, stella-rain,
     star-resonance". A delivery from any other owner is dropped (section 3).
 
+**Added 2026-10-25 (Kade, v2, kade-agent/tasks#19):** Kade: "consider long term, open to extend and
+I'd accept big change, since it's a starting stage"; "make a dispatcher plan for this"; Node 22+
+on the PC; "Pinned clone"; "Side by side". The findings are event-broker #15 and #16; section 9
+replaces their proposals.
+
+13. **The receiver names each event's signal and publishes it to a second stream `EVENTS` (one per account, beside `GITHUB`); each
+    reader profile is a server-side consumer** with a list of signals. A reader no longer carries
+    a subject filter list of its own, and a new reader or a new situation is a table row.
+14. **A Node client replaces `watch.sh` and natscli**, run from a clone of event-broker at a
+    pinned commit (Node 22+ on the PC).
+15. **Side by side, then retire:** v2 runs beside v1 (`GITHUB`, `watch.sh`) until the dispatcher
+    has moved over and Kade has checked it live; then v1 is removed.
+
 Decision 6 changes with decision 11: LAN access needs a key now (section 7). Decision 7 stays, with
 one dispatcher per org.
 
@@ -56,6 +69,7 @@ worker pushes / merges ─▶ GitHub ─(App webhook, HMAC)─▶ receiver (Node
                                                      ▼
                                    NATS JetStream, one account per allowed owner, each with
                                    stream GITHUB (github.<owner>.>, 7 days, 2-min dedupe)
+                                   and, from v2, stream EVENTS (ev.<owner>.>, section 9)
                                       ├─ LAN    nats://<LAN address>:4222  reader-<owner> NKey
                                       └─ public wss://<nas domain>/nats    reader-<owner> NKey
                                                      ▼
@@ -94,6 +108,8 @@ address and is never forwarded.
 - GitHub does not retry a failed delivery on its own. Section 6 covers that gap.
 
 ## 4. Events
+
+*v1, until EB11-retire; v2 is section 9.*
 
 **Subjects:**
 - `github.<org>.<repo>.pr.<n>.<event>`;
@@ -180,6 +196,8 @@ What this cannot see, and what covers it:
 
 ## 6. Durability and the dispatcher's watch
 
+*v1, until EB11-retire; v2 is section 9.*
+
 - **The stream:** one per account, each named `GITHUB`, file storage, subjects `github.<owner>.>`,
   kept for 7 days, with a 2-minute duplicate window keyed by the delivery GUID.
 - **The consumer:** a durable consumer named `dispatcher` in each account, with explicit acks, new
@@ -257,6 +275,14 @@ There is no keyless LAN user: `no_auth_user` is removed, and a local dispatcher 
 | New keys and redeploy | Kade | open |
 | The App: Issues read, `issues` and `issue_comment` subscriptions, installed on each `<owner>/tasks`; receiver redeploy | Kade | next |
 | The cloud websocket route and the cloud environment (variables, network, setup script) | Kade | next |
+| v2 design: this doc's section 9 (EB11-doc) | agent-config #128 | open |
+| EB11-signals: the receiver computes each event's signal | event-broker | open |
+| EB11-stream: stream `EVENTS` beside `GITHUB`, profile consumers | event-broker | open |
+| EB11-client: `client/watch.js` and `src/profiles.js` | event-broker | open |
+| Redeploy with `EVENTS` | Kade | open |
+| EB11-switch: `pr-watch.md` on the client | agent-config | open |
+| Release and live check | Kade | open |
+| EB11-retire: remove `GITHUB`, `watch.sh`, natscli | event-broker, agent-config | open |
 
 **Settled:**
 - The two runtime dependencies `@nats-io/transport-node` and `@nats-io/jetstream` (3.4.0, pinned)
@@ -283,6 +309,9 @@ There is no keyless LAN user: `no_auth_user` is removed, and a local dispatcher 
     `workflow_run` on `main` within seconds (Kade's cloud run);
   - `mergeable` events from real pushes: seen live on stella-rain/core #358, `unstable` then `clean`;
   - a watch drains a backlog in seconds: 21 queued events printed at once with the fixed `watch.sh`.
+- (2026-10-25) A cloud session reached the NAS over `wss://` from Node: `wsconnect` from
+  `@nats-io/nats-core` 3.4.0 read the stream info with a reader key, with or without
+  `NODE_USE_ENV_PROXY` (section 9).
 
 **Open:**
 - Whether `kade-agent/event-broker` needs a profile in `kade-agent/code-quality-assurance`.
@@ -290,3 +319,137 @@ There is no keyless LAN user: `no_auth_user` is removed, and a local dispatcher 
   - a cloud environment's setup script cannot see the environment's variables, so
     `client/watch.sh` writes the seed file when the watch starts;
   - the GitHub "latest release" API answers 403 from the sandbox, so the CLI is pinned.
+
+## 9. v2: signals, profiles and the client
+
+Added 2026-10-25 (decisions 13 to 15). Sections 4 and 6 stay as v1 until EB11-retire; this section
+is what the code is built to. Later tasks (EB11-signals, EB11-stream, EB11-client, EB11-switch) are
+pinned to it.
+
+### Signals
+
+The receiver computes one signal per kept event. "main" is the repository's default branch
+(`repository.default_branch` in the payload). A conclusion is **failed** when it is `failure`,
+`timed_out`, `action_required` or `startup_failure`; **passed** when it is `success`; **other** for
+anything else (`cancelled`, `skipped`, `neutral`, `stale`, null).
+
+| Source | When | Signal |
+|---|---|---|
+| `pull_request` | `closed`, merged / not merged | `pr_merged` / `pr_closed` |
+| `pull_request` | `ready_for_review`, `converted_to_draft` | `pr_ready`, `pr_draft` |
+| `pull_request` | `auto_merge_enabled`, `auto_merge_disabled` | `automerge_on`, `automerge_off` |
+| `mergeable` | `mergeable_state` `behind`, `dirty`, `clean`, `blocked`, `unstable`, `draft`; else | `merge_<state>`; `merge_other` |
+| `workflow_run` | with a PR: failed / passed / other | `ci_failed` / `ci_passed` / `ci_other` |
+| `workflow_run` | no PR, on main | `main_failed` / `main_passed` / `main_other` |
+| `workflow_run` | no PR, another branch | `branch_failed` / `branch_passed` / `branch_other` |
+| `check_run`, `check_suite` | any branch | `check_failed` / `check_passed` / `check_other` |
+| `pull_request_review` | state `changes_requested`, `commented`, `approved`, `dismissed`; else | `review_changes`, `review_comment`, `review_approved`, `review_dismissed`; `review_other` |
+| `issues` | `closed`, `reopened`, `labeled` | `issue_closed`, `issue_reopened`, `issue_labeled` |
+| `issue_comment` | on a PR / on an issue | `pr_comment` / `issue_comment` |
+| `push` | to main | `push_main` |
+
+That is 36 signals. `check_run` and `check_suite` get their own signals so one red run is not three
+`ci_failed`.
+
+### Stream `EVENTS`
+
+One per account, beside `GITHUB`:
+
+- subjects `ev.<owner>.>`, file storage, kept 7 days, discard old;
+- a 2-minute duplicate window keyed by the same message id as v1;
+- `max_bytes` 24 MiB (25165824) while v1 runs, 128 MiB after EB11-retire. Six orgs of `GITHUB`
+  128 MiB plus `EVENTS` 24 MiB come to 956301312 bytes, which fit the 1 GB file store (sized for
+  six; four owners are allowed today, section 3).
+
+The receiver publishes to both streams for every kept event. A failure of either answers 503, so
+GitHub's delivery log shows it. GitHub does not retry (section 3); a delivery redelivered by hand
+within the duplicate window is deduplicated by the message id, and the dispatcher's gh sweep
+(section 6) covers the rest.
+
+### Subjects
+
+`ev.<owner>.<repo>.<scope>.<id>.<signal>`, always six tokens. `<scope>` is:
+
+- `pr`: `<id>` is the PR number;
+- `issue`: `<id>` is the issue number;
+- `branch`: `<id>` is the branch, through `token()`; for a branch check and a `push`.
+
+The owner is lower-cased; repo and branch go through `token()` as in v1 (section 4). `mergeable`
+messages carry their message id in `delivery`, so every v2 message has one.
+
+### Message
+
+The v1 object (section 4) plus `"v": 2` and `"signal"`:
+
+```json
+{"v": 2, "signal": "ci_failed", "delivery": "1f2e…", "repo": "stella-rain/app", "pr": 341,
+ "branch": "claude/z3-orbs", "event": "workflow_run", "action": "completed", "conclusion": "failure",
+ "sha": "9f2c1e0", "check": {"name": "test", "url": "https://github.com/…"}, "…": null}
+```
+
+The elided fields are the v1 ones, null when they do not apply.
+
+### Profiles
+
+`src/profiles.js` in event-broker is a table of profile name to signals. Each profile becomes a
+durable consumer of `EVENTS` with that name: explicit acks, new messages only, a 60 s ack wait,
+`max_ack_pending` 1000, and one filter `ev.<owner>.*.*.*.<signal>` per signal.
+
+- `dispatcher` (17 signals): `pr_merged`, `pr_closed`, `pr_ready`, `pr_draft`, `automerge_off`,
+  `merge_behind`, `merge_dirty`, `ci_failed`, `main_failed`, `main_passed`, `review_changes`,
+  `review_comment`, `issue_closed`, `issue_reopened`, `issue_labeled`, `pr_comment`,
+  `issue_comment`.
+- `all`: every signal (`ev.<owner>.>`), for debugging. Nothing reads it by default.
+
+The `dispatcher` profile leaves out `ci_passed`, `automerge_on`, `merge_clean`, `merge_blocked`,
+`merge_unstable`, `merge_draft`, `merge_other`, `review_approved`, `review_dismissed` and the
+`*_other` signals. A reader that needs one is a new row.
+
+A new reader is a new row; a new situation is a new signal row; both are a receiver redeploy.
+
+### The client
+
+`client/watch.js` in event-broker replaces `watch.sh` and natscli. It needs Node 22+ and runs from a
+clone of event-broker at a pinned commit, after `npm ci --omit=dev`.
+
+- **Command:** `node client/watch.js --owner <org> [--profile dispatcher] [--json]`.
+- **Settings:** the environment first, then `~/.claude/dispatcher/broker.env` (`KEY=value` lines):
+  - `EVENT_BROKER_URL`: `nats://` on the LAN, `wss://` from the cloud;
+  - `EVENT_BROKER_OWNER`: `--owner` wins;
+  - `EVENT_BROKER_NKEY_FILE`: default `~/.claude/dispatcher/<owner>.nk`;
+  - `EVENT_BROKER_CLOUD_SEED`: written to the key file at mode 600 when the file is missing;
+  - `WATCH_PIDFILE`: default `~/.claude/dispatcher/watch-<owner>.pid`.
+- **First line:** `WATCH-ARMED <owner> consumer=<profile> unprocessed=<n>`, printed after the
+  stream's subjects proved to be `ev.<owner>.>`. A key for another org's account prints
+  `BROKER-DOWN key is for another account`.
+- **One line per event:** `<signal> <repo>#<n>` (or `<repo>@<branch>` for branch scope), then
+  `key=value` fields when not null, in this order: `branch`, `sha` (7 characters), `check`, `url`,
+  `conclusion` (on `*_other` only), `label`, `state_reason`, `author`, `delivery`. A value holding a
+  space, `"` or `=` is printed as a JSON string. `--json` prints the v2 object instead.
+- **Ack after write:** a message is acked only after its line is written. A write failure exits 3
+  without acking, and the message comes back after the 60 s ack wait. A message seen again (same
+  stream sequence, in one process) is acked and not printed again. Across a restart delivery is
+  at-least-once: a line written before a kill, with no ack, is printed again.
+- **Heartbeat:** `WATCH-ALIVE <owner> consumer=<profile> unprocessed=<n>` after 600 s with no line
+  printed.
+- **Failure:** `BROKER-DOWN <why>` and exit 1 after two failed connects 5 s apart, a disconnect
+  over 120 s, or two failed consumer reads in a row. Settings errors also print `BROKER-DOWN`, with
+  exit 2. The seed is never printed.
+- **Quiet end (exit 0, no line):** when a newer watch owns the pidfile, on SIGINT, SIGTERM or
+  SIGHUP, and when its parent process is gone (checked every 5 s), so a stopped Monitor leaves no
+  process behind.
+- **Checked 2026-10-25 from a cloud session:** `wsconnect` from `@nats-io/nats-core` 3.4.0 reached
+  the NAS over `wss://` with a reader key (stream info read only), with or without
+  `NODE_USE_ENV_PROXY`.
+
+### Migration, side by side
+
+1. **EB11-stream:** the receiver adds `EVENTS` beside `GITHUB`. Both are published, and a failure
+   of either answers 503.
+2. **EB11-client:** `client/watch.js` and `src/profiles.js`.
+3. **Kade redeploys** the receiver and NATS config with `EVENTS`.
+4. **EB11-switch:** `pr-watch.md` moves to the client.
+5. **Kade releases and checks it live.**
+6. **EB11-retire:** removes `GITHUB`, `watch.sh` and natscli, and raises `EVENTS` to 128 MiB.
+
+Until step 6, sections 4 and 6 are v1 and say so.
