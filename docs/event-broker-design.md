@@ -280,7 +280,7 @@ There is no keyless LAN user: `no_auth_user` is removed, and a local dispatcher 
 | EB11-stream: stream `EVENTS` beside `GITHUB`, profile consumers | event-broker #18 | merged 2026-10-25 |
 | EB11-client: `client/watch.js` and `src/profiles.js` | event-broker #19 | merged 2026-10-25 |
 | Redeploy with `EVENTS` | Kade | done 2026-10-25 |
-| EB11-switch: `pr-watch.md` on the client | agent-config #PR | open (draft) |
+| EB11-switch: `pr-watch.md` on the client | agent-config #129 | open (draft) |
 | Release and live check | Kade | next |
 | EB11-retire: remove `GITHUB`, `watch.sh`, natscli | event-broker, agent-config | open |
 
