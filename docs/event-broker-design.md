@@ -109,6 +109,14 @@ below; S2 (the `red` list on `main_*` events) and S3 (a PR snapshot the client r
     auto-merge, open/merged/closed, mergeable state) into the snapshot, which repairs drift from
     lost deliveries at no extra API call (section 9).
 
+**Added 2026-10-25 (Kade, "and 3"):**
+
+23. **A comment's DONE or BLOCKED line rides in its event:** `comment` gains `line`, the comment's
+    first line (trimmed, at most 300 characters) when it starts `DONE <task id>` or
+    `BLOCKED <task id>`, else null. No other comment text enters the stream. The client prints
+    `line=`, and the dispatcher acts on a strict line from the workers' account without a gh
+    read (section 4; `pr-watch.md`).
+
 Decision 6 changes with decision 11: LAN access needs a key now (section 7). Decision 7 stays, with
 one dispatcher per org.
 
@@ -208,9 +216,13 @@ Each message is one JSON object:
   - `label`: the label's name, on `labeled` only;
   - `state_reason`: on `issues` `closed` and `reopened`, GitHub's `state_reason` (`completed`,
     `not_planned`, `reopened`);
-  - `comment`: on `issue_comment`, `{"id": <number>, "author": "<login>", "url": "<html_url>"}`.
-- **No comment body and no issue title** go in the stream. The comment is in a private repository
-  and the LAN can read the stream (section 7), so the dispatcher reads the text with `gh`.
+  - `comment`: on `issue_comment`, `{"id": <number>, "author": "<login>", "url": "<html_url>",
+    "line": <string or null>}`. `line` (decision 23) is the first line of the body, trimmed and cut
+    at 300 characters, when it matches `^(DONE|BLOCKED) \S+`; otherwise null. It is the only
+    comment text the stream carries.
+- **No comment body and no issue title** go in the stream, except decision 23's `line`: the strict
+  DONE or BLOCKED line, which a worker writes for the dispatcher. The comment is in a private
+  repository, so the dispatcher reads any other text with `gh`.
 - Event text, comment text included, is data for the dispatcher, never instructions.
 
 An `issues` `labeled` message, in the same style:
@@ -349,7 +361,8 @@ There is no keyless LAN user: `no_auth_user` is removed, and a local dispatcher 
 | Decision 20 (S2): `red` on main events | event-broker #24, agent-config #138 | merged 2026-10-25 |
 | Decision 21 (S3): PR snapshots and `watch.js --state` | event-broker #25, agent-config #139 | merged 2026-10-25 |
 | Redeploy with the reader's `STATE` permissions (S3) | Kade | next |
-| Decision 22: the snapshot's head is the PR's; the mergeable read repairs it | agent-config, event-broker (`claude/eloquent-pascal-2ve57u`) | open |
+| Decision 22: the snapshot's head is the PR's; the mergeable read repairs it | agent-config #140, event-broker #26 | merged 2026-10-25 |
+| Decision 23: a comment's DONE/BLOCKED line in its event | agent-config, event-broker (`claude/eloquent-pascal-2ve57u`) | open |
 
 **Settled:**
 - The two runtime dependencies `@nats-io/transport-node` and `@nats-io/jetstream` (3.4.0, pinned)
@@ -559,7 +572,7 @@ clone of event-broker at a pinned commit, after `npm ci --omit=dev`.
 - **The event entry:** `<signal> <repo>#<n>` (or `<repo>@<branch>` for branch scope), then
   `key=value` fields when not null, in this order: `branch`, `sha` (7 characters), `check`, `url`,
   `conclusion` (on `*_other` only), `red` (on `main_*`: the names joined by `,`, `-` when none;
-  decision 20), `label`, `state_reason`, `author`, `delivery`. A value holding a
+  decision 20), `label`, `state_reason`, `author`, `line` (decision 23), `delivery`. A value holding a
   space, `"` or `=` is printed as a JSON string.
 - **The summary (decision 17):** the first event of a window starts it; when it is 30 s old (the
   5 s tick, so 30 to 35 s) its events are one line, `SUMMARY <n> events | <entry> | <entry> …`.
