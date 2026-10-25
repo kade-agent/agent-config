@@ -36,13 +36,13 @@ The client prints it as one entry of a summary line (see The lines below). Its f
 ## Arming the broker Monitor
 
 The watch is event-broker's `client/watch.js`, a Node 22+ program run from a clone of
-`kade-agent/event-broker` at a reviewed commit (`72c07448cc43b805a8b8c787fee41d8ad0fe0e51`).
+`kade-agent/event-broker` at a reviewed commit (`6bba7b696710678f3f5f780565bf7cf85d8771fc`).
 Install it once per pin, on the PC:
 
 ```bash
 d="$HOME/.claude/dispatcher/event-broker"
 if [ -d "$d/.git" ]; then git -C "$d" fetch origin; else git clone https://github.com/kade-agent/event-broker "$d"; fi
-git -C "$d" checkout --detach 72c07448cc43b805a8b8c787fee41d8ad0fe0e51
+git -C "$d" checkout --detach 6bba7b696710678f3f5f780565bf7cf85d8771fc
 npm ci --omit=dev --prefix "$d"
 ```
 
@@ -204,7 +204,7 @@ The cloud environment's settings:
 - **Network access:** allows `<nats host>`.
 - **Setup script:** installs the pinned client and nothing else:
   ```bash
-  git clone https://github.com/kade-agent/event-broker /root/event-broker && git -C /root/event-broker checkout --detach 72c07448cc43b805a8b8c787fee41d8ad0fe0e51 && npm ci --omit=dev --prefix /root/event-broker
+  git clone https://github.com/kade-agent/event-broker /root/event-broker && git -C /root/event-broker checkout --detach 6bba7b696710678f3f5f780565bf7cf85d8771fc && npm ci --omit=dev --prefix /root/event-broker
   ```
 - **Monitor command:**
   `node /root/event-broker/client/watch.js --owner <org> --profile dispatcher`.
