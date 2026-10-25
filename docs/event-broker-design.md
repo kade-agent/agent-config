@@ -95,6 +95,11 @@ below; S2 (the `red` list on `main_*` events) and S3 (a PR snapshot the client r
     `main_passed` and `main_still_passed` carries it as `red`. The client prints `red=`; the
     dispatcher lifts its "main is red" hold on a `main_passed` whose `red` is empty (section 9).
 
+21. **A PR snapshot the dispatcher reads (S3):** the receiver keeps one snapshot per PR in `STATE`,
+    updated by every v2 event on that PR, and `watch.js --state <owner>/<repo>` prints the
+    repository's `red` list and its PR snapshots, then exits. The reader key may read `STATE`;
+    the dispatcher's sweep reads the snapshots first and gh only for what they lack (section 9).
+
 Decision 6 changes with decision 11: LAN access needs a key now (section 7). Decision 7 stays, with
 one dispatcher per org.
 
@@ -332,7 +337,9 @@ There is no keyless LAN user: `no_auth_user` is removed, and a local dispatcher 
 | Redeploy the receiver with `push_branch` | Kade | next |
 | Decision 19 (S1): stream `STATE` for the receiver's state | agent-config #137, event-broker #23 | merged 2026-10-25 |
 | Redeploy with `STATE` (the new `nats-server.conf` permissions) | Kade | next |
-| Decision 20 (S2): `red` on main events | event-broker #24 (merged 2026-10-25), agent-config #138 | open |
+| Decision 20 (S2): `red` on main events | event-broker #24, agent-config #138 | merged 2026-10-25 |
+| Decision 21 (S3): PR snapshots and `watch.js --state` | agent-config, event-broker (`claude/eloquent-pascal-2ve57u`) | open |
+| Redeploy with the reader's `STATE` permissions (S3) | Kade | next |
 
 **Settled:**
 - The two runtime dependencies `@nats-io/transport-node` and `@nats-io/jetstream` (3.4.0, pinned)
@@ -442,6 +449,15 @@ store. The receiver is its only writer and reader in S1.
 | `state.<owner>.<repo>.pr.<n>.mergeable` | `{"mergeable_state", "sha"}` | after a `mergeable` event is published |
 | `state.<owner>.<repo>.main.<workflow>` (`token()` of its name) | `{"passed": true \| false}` | after a `main_failed` or `main_passed` / `main_still_passed` is published |
 | `state.<owner>.<repo>.red` (decision 20) | `{"red": [<workflow name>, …]}`, sorted | the same, adding or removing that workflow |
+| `state.<owner>.<repo>.pr.<n>` (decision 21) | the PR snapshot below | after every v2 event on that PR is published |
+
+**The PR snapshot (decision 21):** `{"repo", "pr", "branch", "sha", "state": "open" | "merged" |
+"closed", "draft", "auto_merge", "mergeable_state", "checks": {<name>: <conclusion>}, "review",
+"last_comment": {"author", "url"}, "updated_at"}`. Each event sets what it knows: a `pull_request`
+event its fields and `state` (`pr_merged` merged, `pr_closed` closed, a reopen or anything else
+open), `mergeable` the state, a check or run `checks[<name>]`, a review `review` (lower case), a
+`pr_comment` `last_comment`. A new `sha` empties `checks`, so they are always the head's. Unknown
+fields are null. Updates run one PR at a time; a failed write is logged, as for every key.
 
 - **Read:** memory first, else the subject's last message (`$JS.API.STREAM.MSG.GET.STATE`); a
   missing key is unknown, as before. A failed read counts as unknown too: at worst one repeat, as
@@ -456,7 +472,8 @@ store. The receiver is its only writer and reader in S1.
 - **Kept 30 days:** a closed PR's or a removed workflow's key ages out; a workflow that has not run
   on main for 30 days is unknown again (one `main_passed`).
 - **Permissions:** the receiver user of each account adds `state.<owner>.>` and the `STATE` stream
-  API (`INFO`, `CREATE`, `UPDATE`, `MSG.GET`). The reader gets nothing in S1.
+  API (`INFO`, `CREATE`, `UPDATE`, `MSG.GET`). The reader gets `INFO` and `MSG.GET` on `STATE`
+  (decision 21): read only, as for `EVENTS`.
 
 ### Subjects
 
@@ -515,6 +532,12 @@ clone of event-broker at a pinned commit, after `npm ci --omit=dev`.
   stream's subjects proved to be `ev.<owner>.>`. A key for another org's account prints
   `BROKER-DOWN key is for another account`.
 - **Command (decision 17):** `--window <s>`, default 30. `--window 0` prints one line per event.
+- **`--state <owner>/<repo>` (decision 21):** reads `STATE` with the reader key and exits 0: first
+  `STATE <owner>/<repo> red=<names, or ->`, then one line per PR snapshot, by number:
+  `pr <owner>/<repo>#<n> state=<state> branch=… sha=<7> mergeable=… checks=<name>:<conclusion>,…
+  review=… draft=… auto_merge=… last_comment=<author> updated_at=…` (null fields left out, values
+  quoted as in an entry). `--json` prints one object `{"repo", "red", "prs": [<snapshot>, …]}`.
+  An owner other than `--owner` is exit 2; `BROKER-DOWN <why>` and exit 1 when it cannot read.
 - **The event entry:** `<signal> <repo>#<n>` (or `<repo>@<branch>` for branch scope), then
   `key=value` fields when not null, in this order: `branch`, `sha` (7 characters), `check`, `url`,
   `conclusion` (on `*_other` only), `red` (on `main_*`: the names joined by `,`, `-` when none;
