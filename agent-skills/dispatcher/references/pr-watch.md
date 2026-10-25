@@ -18,7 +18,7 @@ Each message is one JSON object on a subject such as `ev.stella-rain.app.pr.341.
  "sha": "9f2c1e0", "check": {"name": "test", "url": "https://github.com/…"}}
 ```
 
-The client prints it as one line (see The lines below). Its fields:
+The client prints it as one entry of a summary line (see The lines below). Its fields:
 
 - `signal` says what happened; the receiver has already decided whether a conclusion is a failure
   (`failure`, `timed_out`, `action_required` or `startup_failure`) and whether a check on `main` is
@@ -75,16 +75,22 @@ Every stdout line is one of these:
 - `WATCH-ARMED <org> consumer=dispatcher unprocessed=<n>`: the first line, printed once the stream
   proved to be the org's. If no such line comes within 30 s, the Monitor is not armed: use the gh
   poll.
-- an event line, `<signal> <repo>#<n> key=value…` (`<repo>@<branch>` with no PR or issue). The
-  fields follow in this order when not null: `branch`, `sha` (7 characters), `check`, `url`, `label`,
-  `state_reason`, `author`, `delivery`. A value holding a space, `"` or `=` is a JSON string. For
-  example: `ci_failed stella-rain/app#341 branch=claude/z3-orbs sha=9f2c1e0 check=test url=https://github.com/… delivery=1f2e…`
+- a summary line, `SUMMARY <n> events | <entry> | <entry> …`: every event of a 30 s window
+  (design decision 17), printed 30 to 35 s after its first event; the backlog counted in
+  `WATCH-ARMED` comes as one summary at once. Handle each entry with the table below, in order.
+- an entry, `<signal> <repo>#<n> key=value…` (`<repo>@<branch>` with no PR or issue). The fields
+  follow in this order when not null: `branch`, `sha` (7 characters), `check`, `url`, `label`,
+  `state_reason`, `author`, `delivery`; `count=<k>` closes an entry that stands for k events with
+  the same signal, target and check (the fields are the latest one's). A value holding a space,
+  `"` or `=` is a JSON string. For example:
+  `SUMMARY 3 events | ci_failed stella-rain/app#341 branch=claude/z3-orbs sha=9f2c1e0 check=test url=https://github.com/… delivery=1f2e… count=2 | pr_merged stella-rain/core#393 delivery=7a1c…`
 - `WATCH-ALIVE <org> consumer=dispatcher unprocessed=<n>`: after 10 minutes with no line. The watch
   is quiet, not dead.
 - `BROKER-DOWN <why>`: just before the client exits. Twice in a row: the gh poll, as before.
 
-The client acks a message only after its line is written, so a line cannot be lost between the ack
-and the print.
+The client acks a message only after the summary holding it is written, so an event cannot be lost
+between the ack and the print. A watch that ends with a window open prints none of it; the next
+watch gets those events.
 
 - **Exit codes** (what the dispatcher does):
   - 0, a quiet end with no line: a newer watch owns the pidfile, a signal arrived, or the parent
@@ -117,7 +123,8 @@ and the print.
   client's `--profile` defaults to `dispatcher`; the profile `all` (every signal) is for
   debugging, and like any test read it takes events away from the dispatcher.
 - **The client.** `watch.js` needs Node 22+ and the clone's `npm ci --omit=dev`; there is no CLI to
-  install and no `PATH` to set. `--json` prints the v2 object instead of the line.
+  install and no `PATH` to set. `--json` prints `{"summary": true, "count": <n>, "events": [<v2
+  object>, …]}` instead of the line. `--window 0` prints one entry per line, without `SUMMARY`.
 - **Checked live.** Not yet: the client is NOT VERIFIED until Kade's release and live check, where a
   Monitor on the PC and one in the cloud print `WATCH-ARMED`, then real events as signal lines. What
   was checked earlier: a cloud session reached the NAS over `wss://` from Node (`wsconnect`, a reader
