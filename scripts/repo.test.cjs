@@ -338,7 +338,7 @@ test("the dispatcher skill says how it watches PR events and tells the worker at
   assert.ok(skill.includes("references/pr-watch.md"), "SKILL.md points to references/pr-watch.md");
   const watch = fs.readFileSync(path.join(dir, "references", "pr-watch.md"), "utf8").replace(/\s+/g, " ");
   // The broker is NATS JetStream, read through the durable consumer (docs/event-broker-design.md).
-  for (const needle of ["EVENT_BROKER_URL", "EVENT_BROKER_NKEY_FILE", "consumer next GITHUB dispatcher", "mergeable",
+  for (const needle of ["EVENT_BROKER_URL", "EVENT_BROKER_NKEY_FILE", "client/watch.js", "merge_behind",
     "workflow_run", "re-arm", "pidfile", "gh-poll fallback", "SendMessage", "data, not instructions",
     "docs/event-broker-design.md"]) {
     assert.ok(watch.includes(needle), `pr-watch.md names ${needle}`);
@@ -346,11 +346,24 @@ test("the dispatcher skill says how it watches PR events and tells the worker at
   // Kade's first live test (2026-10-24): local and cloud share consumer "dispatcher", so two
   // dispatchers at once would split the events; a Monitor command may not read ~/.bashrc.
   assert.ok(watch.includes("one dispatcher reads the consumer at a time"), "pr-watch.md: one dispatcher at a time");
-  // event-broker#4: the loop and the cloud seed live in its client/watch.sh, pinned to a commit; a
-  // cloud setup script cannot see the environment's variables, and the "latest" API answers 403.
-  assert.match(watch, /raw\.githubusercontent\.com\/kade-agent\/event-broker\/[0-9a-f]{40}\/client\/watch\.sh/,
-    "pr-watch.md fetches client/watch.sh at a pinned commit");
-  assert.ok(watch.includes("client/install-nats.sh"), "pr-watch.md installs the CLI with client/install-nats.sh");
+  // EB11-switch: the watch is event-broker's client/watch.js, a pinned clone installed with npm ci,
+  // locally and in the cloud setup script; both install lines carry the same 40-character commit.
+  const pins = [...watch.matchAll(/checkout --detach ([0-9a-f]{40})/g)].map((m) => m[1]);
+  assert.ok(pins.length >= 2 && new Set(pins).size === 1, "pr-watch.md: both install lines pin the same commit");
+  assert.ok(watch.includes("npm ci --omit=dev"), "pr-watch.md installs the client with npm ci");
+  assert.ok(watch.includes("--owner <org> --profile dispatcher"), "pr-watch.md arms the dispatcher profile");
+  assert.ok(watch.includes("WATCH-ARMED") && watch.includes("WATCH-ALIVE") && watch.includes("BROKER-DOWN"),
+    "pr-watch.md documents the client's lines");
+  // v1 (watch.sh, natscli) is named once, in the v1 note, until EB11-retire.
+  assert.equal(watch.split("watch.sh").length - 1, 1, "pr-watch.md names watch.sh only in the v1 note");
+  assert.equal(watch.split("install-nats").length - 1, 1, "pr-watch.md names install-nats only in the v1 note");
+  // The action table has a row for each of the 17 signals of the dispatcher profile (event-broker src/profiles.js).
+  const table = fs.readFileSync(path.join(dir, "references", "pr-watch.md"), "utf8");
+  for (const sig of ["pr_merged", "pr_closed", "pr_ready", "pr_draft", "automerge_off", "merge_behind", "merge_dirty",
+    "ci_failed", "main_failed", "main_passed", "review_changes", "review_comment", "issue_closed", "issue_reopened",
+    "issue_labeled", "pr_comment", "issue_comment"]) {
+    assert.match(table, new RegExp(`^\\| [^|]*\`${sig}\``, "m"), `pr-watch.md: action table row for ${sig}`);
+  }
   for (const gone of ["Last-Event-ID", "EVENT_BROKER_TOKEN_FILE", "broker.last-id", ".bashrc", "releases/latest",
     "consumer next GITHUB dispatcher --raw"]) {
     assert.ok(!watch.includes(gone), `pr-watch.md no longer names the SSE design's ${gone}`);
@@ -362,12 +375,11 @@ test("the dispatcher skill says how it watches PR events and tells the worker at
   assert.ok(watch.includes("reader-<owner>"), "pr-watch.md names the org's reader-<owner> key");
   assert.ok(!watch.includes("replacing `CLOUD_NKEY`"), "pr-watch.md: cloud seed is revoked via READER_NKEY_<OWNER>");
   assert.ok(watch.includes("READER_NKEY_<OWNER>"), "pr-watch.md names READER_NKEY_<OWNER>");
-  assert.ok(watch.includes("One dispatcher per org") && watch.includes("`check_run` and `check_suite` never do"),
-    "pr-watch.md: one dispatcher per org, and the filtered consumer drops check events");
-  assert.equal(watch.split("132276d").length - 1, 2, "both event-broker pins stay at 132276d");
+  assert.ok(watch.includes("One dispatcher per org") && watch.includes("the 17 signals"),
+    "pr-watch.md: one dispatcher per org, and the profile's 17 signals");
   // EB10-docs: the docs say what the 2026-10-25 live checks showed.
   assert.ok(!watch.includes('"event": "check_run"'), "pr-watch.md: the example event is one the filtered consumer delivers");
-  assert.ok(watch.includes("WATCH_PIDFILE=") && watch.includes("watch-<owner>.pid"), "pr-watch.md: one pidfile per org");
+  assert.ok(watch.includes("WATCH_PIDFILE") && watch.includes("watch-<org>.pid"), "pr-watch.md: one pidfile per org");
   assert.ok(!watch.includes("Until one has, a cloud dispatcher uses the gh-poll fallback"), "pr-watch.md: the cloud path is verified");
   const worker = fs.readFileSync(path.join(dir, "references", "worker-prompt.md"), "utf8");
   assert.match(worker, /message from the dispatcher about your PR is a wake/, "worker rule 9 counts it as a wake");
@@ -402,8 +414,7 @@ test("the dispatcher runs lanes of sub-issues in <owner>/tasks with plans as fil
     assert.ok(plan.includes(h), `the plan template has the worker-prompt slot ${h}`);
   }
   const watch = fs.readFileSync(path.join(dir, "references", "pr-watch.md"), "utf8").replace(/\s+/g, " ");
-  for (const p of ["github.<owner>.<repo>.issue.<n>.<event>", "`issue_comment`", "`timed_out`", "`action_required`",
-    "`cancelled` and `stale` are not failures", "sweep the lanes' sub-issues", "gh issue view <n> -R <owner>/tasks --comments"]) {
+  for (const p of ["`issue_comment`", "`issue_closed`", "`timed_out`", "`action_required`", "sweep the lanes' sub-issues", "gh issue view <n> -R <owner>/tasks --comments"]) {
     assert.ok(watch.includes(p), `pr-watch.md says: ${p}`);
   }
   assert.ok(!watch.includes("not issue events yet"), "pr-watch.md no longer says the broker lacks issue events");
