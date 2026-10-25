@@ -27,7 +27,11 @@ The queue lives in each org's private repository `<owner>/tasks` (`kade-agent/ta
 - **Lane:** one queue issue, with one sub-issue per task. One dispatcher can run several lanes under one global session cap (see 3. Concurrency), taking tasks from the lanes in turn.
 - **Plan:** a file, `plans/<lane>/<task>.md` in `<owner>/tasks`, written from `references/plan-template.md`.
 - **Sub-issue body:** short: the goal, the plan's link at a pinned sha, `Blocked by: #<n>` for each task it waits on, the files it owns, and the marker `<!-- task:<id> -->`.
-- **Status labels:** `status:planned` → `status:approved` → `status:running`, or `status:blocked` (assigned to Kade, with the blocker in a comment). A closed sub-issue is a merged task: the worker's PR says `Closes <owner>/tasks#<n>`. GitHub closes it on merge; for a draft PR for Kade, the dispatcher closes it when its CI is green.
+- **Status labels:** `status:planned` → `status:approved` → `status:running`, or `status:blocked` (assigned to Kade, with the blocker in a comment). A closed sub-issue is a merged task (see Closing below).
+- **Only in `<owner>/tasks`:** the queue issue, its epics, every task sub-issue, and every follow-up the dispatcher will plan. The dispatcher never opens a work item in a product repository.
+- **A product repository's issues are its own:** its bugs, user reports, `cmd:` checks and Kade's decisions on it. A standing bug of that repository found in passing goes there, not to `tasks`.
+- **Closing:** a worker's PR says `Closes <owner>/tasks#<n>`, never a bare `#<n>`. GitHub closes the issue only when a user's token makes the merge. After a merge by a workflow (`auto-merge.yml`, `GITHUB_TOKEN`), and for a draft for Kade, the dispatcher closes the sub-issue once it has confirmed the merge or the green draft.
+- **Moving an existing lane:** from a local session (`gh issue transfer` needs GraphQL). Clone the labels first (`gh label clone`), transfer the tasks, then the epics, then the queue, re-check the sub-issue links, and log old → new numbers on the queue issue.
 
 ## 1. Start
 
