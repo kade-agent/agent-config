@@ -79,7 +79,8 @@ Every stdout line is one of these:
   (design decision 17), printed 30 to 35 s after its first event; the backlog counted in
   `WATCH-ARMED` comes as one summary at once. Handle each entry with the table below, in order.
 - an entry, `<signal> <repo>#<n> key=value…` (`<repo>@<branch>` with no PR or issue). The fields
-  follow in this order when not null: `branch`, `sha` (7 characters), `check`, `url`, `label`,
+  follow in this order when not null: `branch`, `sha` (7 characters), `check`, `url`, `red` (on
+  `main_failed` and `main_passed`: the workflows failing on that `main`, `-` when none), `label`,
   `state_reason`, `author`, `delivery`; `count=<k>` closes an entry that stands for k events with
   the same signal, target and check (the fields are the latest one's). A value holding a space,
   `"` or `=` is a JSON string. For example:
@@ -182,9 +183,9 @@ away, before anything else in the wake routine:
 | `issue_comment` on a sub-issue, from the workers' account | Nothing to the worker. Read it with `gh issue view`; act only on a strict DONE or BLOCKED line. |
 | `pr_ready` or `pr_draft`, on a PR whose merge path is Kade's | Nothing to the worker. The line does not say who did it: check with gh, and if it was not the worker or you, tell Kade at once. |
 | `automerge_off` | Nothing to the worker. Check with gh who turned it off; if it was someone else, tell Kade that the task's merge path changed. |
-| `main_failed` | Nothing to the worker. `main` is red: follow SKILL.md, 5. Watching, step 5. |
+| `main_failed` | Nothing to the worker. `main` is red, and `red=` lists every workflow failing there: follow SKILL.md, 5. Watching, step 5. |
 | `push_branch` on a task's branch | Nothing to the worker. It is that task's progress: note the time, which restarts its 2 hours (SKILL.md, 5. Watching). On any other branch, nothing. |
-| `main_passed` | Nothing to the worker. That workflow on `main` is green again (or the receiver restarted). If it was the one holding `main` red, lift the hold from `main_failed` and dispatch what waited; otherwise say nothing. |
+| `main_passed` | Nothing to the worker. That workflow on `main` is green again. With `red=-`, `main` is green: lift the hold from `main_failed` and dispatch what waited. Otherwise `red=` names the workflows still holding it: say nothing. |
 
 These are the 18 signals of the `dispatcher` profile. No other signal arrives, so a `ci_passed`, a
 `merge_clean` or a `push_main` needs no handling. After a push to `main`, `merge_behind` and
