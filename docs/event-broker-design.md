@@ -275,6 +275,14 @@ There is no keyless LAN user: `no_auth_user` is removed, and a local dispatcher 
 | New keys and redeploy | Kade | open |
 | The App: Issues read, `issues` and `issue_comment` subscriptions, installed on each `<owner>/tasks`; receiver redeploy | Kade | next |
 | The cloud websocket route and the cloud environment (variables, network, setup script) | Kade | next |
+| v2 design: this doc's section 9 (EB11-doc) | agent-config #<PR> | open |
+| EB11-signals: the receiver computes each event's signal | event-broker | open |
+| EB11-stream: stream `EVENTS` beside `GITHUB`, profile consumers | event-broker | open |
+| EB11-client: `client/watch.js` and `src/profiles.js` | event-broker | open |
+| Redeploy with `EVENTS` | Kade | open |
+| EB11-switch: `pr-watch.md` on the client | agent-config | open |
+| Release and live check | Kade | open |
+| EB11-retire: remove `GITHUB`, `watch.sh`, natscli | event-broker, agent-config | open |
 
 **Settled:**
 - The two runtime dependencies `@nats-io/transport-node` and `@nats-io/jetstream` (3.4.0, pinned)
@@ -301,6 +309,9 @@ There is no keyless LAN user: `no_auth_user` is removed, and a local dispatcher 
     `workflow_run` on `main` within seconds (Kade's cloud run);
   - `mergeable` events from real pushes: seen live on stella-rain/core #358, `unstable` then `clean`;
   - a watch drains a backlog in seconds: 21 queued events printed at once with the fixed `watch.sh`.
+- (2026-10-25) A cloud session reached the NAS over `wss://` from Node: `wsconnect` from
+  `@nats-io/nats-core` 3.4.0 read the stream info with a reader key, with or without
+  `NODE_USE_ENV_PROXY` (section 9).
 
 **Open:**
 - Whether `kade-agent/event-broker` needs a profile in `kade-agent/code-quality-assurance`.
