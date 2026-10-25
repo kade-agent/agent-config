@@ -275,7 +275,7 @@ There is no keyless LAN user: `no_auth_user` is removed, and a local dispatcher 
 | New keys and redeploy | Kade | open |
 | The App: Issues read, `issues` and `issue_comment` subscriptions, installed on each `<owner>/tasks`; receiver redeploy | Kade | next |
 | The cloud websocket route and the cloud environment (variables, network, setup script) | Kade | next |
-| v2 design: this doc's section 9 (EB11-doc) | agent-config #<PR> | open |
+| v2 design: this doc's section 9 (EB11-doc) | agent-config #128 | open |
 | EB11-signals: the receiver computes each event's signal | event-broker | open |
 | EB11-stream: stream `EVENTS` beside `GITHUB`, profile consumers | event-broker | open |
 | EB11-client: `client/watch.js` and `src/profiles.js` | event-broker | open |
