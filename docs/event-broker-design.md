@@ -383,3 +383,49 @@ durable consumer of `EVENTS` with that name: explicit acks, new messages only, a
 - `all`: every signal (`ev.<owner>.>`), for debugging. Nothing reads it by default.
 
 A new reader is a new row; a new situation is a new signal row; both are a receiver redeploy.
+
+### The client
+
+`client/watch.js` in event-broker replaces `watch.sh` and natscli. It needs Node 22+ and runs from a
+clone of event-broker at a pinned commit, after `npm ci --omit=dev`.
+
+- **Command:** `node client/watch.js --owner <org> [--profile dispatcher] [--json]`.
+- **Settings:** the environment first, then `~/.claude/dispatcher/broker.env` (`KEY=value` lines):
+  - `EVENT_BROKER_URL`: `nats://` on the LAN, `wss://` from the cloud;
+  - `EVENT_BROKER_OWNER`: `--owner` wins;
+  - `EVENT_BROKER_NKEY_FILE`: default `~/.claude/dispatcher/<owner>.nk`;
+  - `EVENT_BROKER_CLOUD_SEED`: written to the key file at mode 600 when the file is missing;
+  - `WATCH_PIDFILE`: default `~/.claude/dispatcher/watch-<owner>.pid`.
+- **First line:** `WATCH-ARMED <owner> consumer=<profile> unprocessed=<n>`, printed after the
+  stream's subjects proved to be `ev.<owner>.>`. A key for another org's account prints
+  `BROKER-DOWN key is for another account`.
+- **One line per event:** `<signal> <repo>#<n>` (or `<repo>@<branch>` for branch scope), then
+  `key=value` fields when not null, in this order: `branch`, `sha` (7 characters), `check`, `url`,
+  `conclusion` (on `*_other` only), `label`, `state_reason`, `author`, `delivery`. A value holding a
+  space, `"` or `=` is printed as a JSON string. `--json` prints the v2 object instead.
+- **Ack after write:** a message is acked only after its line is written. A write failure exits 3
+  without acking, and the message comes back after the 60 s ack wait. A message seen again (same
+  stream sequence) is acked and not printed again.
+- **Heartbeat:** `WATCH-ALIVE <owner> consumer=<profile> unprocessed=<n>` after 600 s with no line
+  printed.
+- **Failure:** `BROKER-DOWN <why>` and exit 1 after two failed connects 5 s apart, a disconnect
+  over 120 s, or two failed consumer reads in a row. Settings errors also print `BROKER-DOWN`, with
+  exit 2. The seed is never printed.
+- **Quiet end (exit 0, no line):** when a newer watch owns the pidfile, on SIGINT, SIGTERM or
+  SIGHUP, and when its parent process is gone (checked every 5 s), so a stopped Monitor leaves no
+  process behind.
+- **Checked 2026-10-25 from a cloud session:** `wsconnect` from `@nats-io/nats-core` 3.4.0 reached
+  the NAS over `wss://` with a reader key (stream info read only), with or without
+  `NODE_USE_ENV_PROXY`.
+
+### Migration, side by side
+
+1. **EB11-stream:** the receiver adds `EVENTS` beside `GITHUB`. Both are published, and a failure
+   of either answers 503.
+2. **EB11-client:** `client/watch.js` and `src/profiles.js`.
+3. **Kade redeploys** the receiver and NATS config with `EVENTS`.
+4. **EB11-switch:** `pr-watch.md` moves to the client.
+5. **Kade releases and checks it live.**
+6. **EB11-retire:** removes `GITHUB`, `watch.sh` and natscli, and raises `EVENTS` to 128 MiB.
+
+Until step 6, sections 4 and 6 are v1 and say so.
