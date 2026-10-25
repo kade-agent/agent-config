@@ -40,6 +40,19 @@
 12. **The receiver accepts only Kade's owners:** "kade-k8s-platform, kade-agent, stella-rain,
     star-resonance". A delivery from any other owner is dropped (section 3).
 
+**Added 2026-10-25 (Kade, v2, kade-agent/tasks#19):** Kade: "consider long term, open to extend and
+I'd accept big change, since it's a starting stage"; "make a dispatcher plan for this"; Node 22+
+on the PC; "Pinned clone"; "Side by side". The findings are event-broker #15 and #16; section 9
+replaces their proposals.
+
+13. **The receiver names each event's signal and publishes it to a second stream `EVENTS`; each
+    reader profile is a server-side consumer** with a list of signals. A reader no longer carries
+    a subject filter list of its own, and a new reader or a new situation is a table row.
+14. **A Node client replaces `watch.sh` and natscli**, run from a clone of event-broker at a
+    pinned commit (Node 22+ on the PC).
+15. **Side by side, then retire:** v2 runs beside v1 (`GITHUB`, `watch.sh`) until the dispatcher
+    has moved over and Kade has checked it live; then v1 is removed.
+
 Decision 6 changes with decision 11: LAN access needs a key now (section 7). Decision 7 stays, with
 one dispatcher per org.
 
