@@ -53,6 +53,14 @@ replaces their proposals.
 15. **Side by side, then retire:** v2 runs beside v1 (`GITHUB`, `watch.sh`) until the dispatcher
     has moved over and Kade has checked it live; then v1 is removed.
 
+**Added 2026-10-25 (Kade):** a dispatcher reported every green workflow on `main` (20 lines in
+30 minutes with no open PR). Kade approved the broker-side fix: "Approve for NAS Deploy option".
+
+16. **`main_passed` means a workflow on main turned green:** the receiver gives it only to the
+    first pass of a workflow on main after that workflow failed there, or after the receiver
+    started. Every other pass is `main_still_passed`, which the `dispatcher` profile does not read
+    (section 9).
+
 Decision 6 changes with decision 11: LAN access needs a key now (section 7). Decision 7 stays, with
 one dispatcher per org.
 
@@ -283,6 +291,8 @@ There is no keyless LAN user: `no_auth_user` is removed, and a local dispatcher 
 | EB11-switch: `pr-watch.md` on the client | agent-config #129 | open (draft) |
 | Release and live check | Kade | next |
 | EB11-retire: remove `GITHUB`, `watch.sh`, natscli | event-broker, agent-config | open |
+| Decision 16: `main_passed` only green after red, `main_still_passed` otherwise | agent-config, event-broker (`claude/eloquent-pascal-2ve57u`) | open |
+| Redeploy the receiver with decision 16 | Kade | next |
 
 **Settled:**
 - The two runtime dependencies `@nats-io/transport-node` and `@nats-io/jetstream` (3.4.0, pinned)
@@ -340,7 +350,7 @@ anything else (`cancelled`, `skipped`, `neutral`, `stale`, null).
 | `pull_request` | `auto_merge_enabled`, `auto_merge_disabled` | `automerge_on`, `automerge_off` |
 | `mergeable` | `mergeable_state` `behind`, `dirty`, `clean`, `blocked`, `unstable`, `draft`; else | `merge_<state>`; `merge_other` |
 | `workflow_run` | with a PR: failed / passed / other | `ci_failed` / `ci_passed` / `ci_other` |
-| `workflow_run` | no PR, on main | `main_failed` / `main_passed` / `main_other` |
+| `workflow_run` | no PR, on main | `main_failed` / `main_passed` or `main_still_passed` (below) / `main_other` |
 | `workflow_run` | no PR, another branch | `branch_failed` / `branch_passed` / `branch_other` |
 | `check_run`, `check_suite` | any branch | `check_failed` / `check_passed` / `check_other` |
 | `pull_request_review` | state `changes_requested`, `commented`, `approved`, `dismissed`; else | `review_changes`, `review_comment`, `review_approved`, `review_dismissed`; `review_other` |
@@ -348,8 +358,17 @@ anything else (`cancelled`, `skipped`, `neutral`, `stale`, null).
 | `issue_comment` | on a PR / on an issue | `pr_comment` / `issue_comment` |
 | `push` | to main | `push_main` |
 
-That is 36 signals. `check_run` and `check_suite` get their own signals so one red run is not three
+That is 37 signals. `check_run` and `check_suite` get their own signals so one red run is not three
 `ci_failed`.
+
+**Green after red (decision 16).** A pass on main is `main_passed` only when the last completed
+run of that workflow (repository and workflow name) on main that the receiver published was failed,
+or when it has published none since it started; otherwise it is `main_still_passed`. `main_other`
+leaves that state as it was. The state lives in the receiver's memory, like the mergeable states
+(section 5): after a restart, the first pass of each workflow is `main_passed` again, so a
+recovery is never lost, at the cost of one repeat per workflow. The state moves only after both
+publishes succeed, so a delivery answered 503 and redelivered gets the same signal. v1 (`GITHUB`)
+is unchanged.
 
 ### Stream `EVENTS`
 
@@ -402,7 +421,7 @@ durable consumer of `EVENTS` with that name: explicit acks, new messages only, a
 - `all`: every signal (`ev.<owner>.>`), for debugging. Nothing reads it by default.
 
 The `dispatcher` profile leaves out `ci_passed`, `automerge_on`, `merge_clean`, `merge_blocked`,
-`merge_unstable`, `merge_draft`, `merge_other`, `review_approved`, `review_dismissed` and the
+`merge_unstable`, `merge_draft`, `merge_other`, `main_still_passed`, `review_approved`, `review_dismissed` and the
 `*_other` signals. A reader that needs one is a new row.
 
 A new reader is a new row; a new situation is a new signal row; both are a receiver redeploy.
