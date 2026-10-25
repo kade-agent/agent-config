@@ -107,8 +107,17 @@ watch gets those events.
   after the 60 s ack wait with the same `delivery`. A message lost between GitHub and the broker is
   caught by the gh sweep below.
 - **Re-arm.** A Monitor lasts at most 30 minutes. Re-arm about every 25 minutes, and at once when
-  it ends or prints `BROKER-DOWN`. On every re-arm, run one gh sweep of the open PRs in your table,
-  to catch anything the broker never received: GitHub does not retry a failed delivery.
+  it ends or prints `BROKER-DOWN`. On every re-arm, sweep the open PRs in your table, to catch
+  anything the broker never received: GitHub does not retry a failed delivery. Start with each
+  repository's snapshot (design decision 21), which prints its `red` list and, per PR, the state,
+  head sha, mergeable state, the checks on the head, the last review and the last comment's author:
+
+  ```bash
+  node "$HOME/.claude/dispatcher/event-broker/client/watch.js" --owner <org> --state <owner>/<repo>
+  ```
+
+  Then run gh only for what it lacks: a PR it does not list, comment text (DONE and BLOCKED lines),
+  or a value that disagrees with what you saw. Before acting on a merge, confirm it with gh.
 - **Single instance.** The client writes its process id to the pidfile, and the newest instance
   wins: an older watch left running by an expired Monitor ends quietly on its next pass. The pidfile
   is per org, so two orgs on one machine do not disturb each other, each with its own key file. A
