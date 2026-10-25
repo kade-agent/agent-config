@@ -61,6 +61,15 @@ replaces their proposals.
     started. Every other pass is `main_still_passed`, which the `dispatcher` profile does not read
     (section 9).
 
+**Added 2026-10-25 (Kade):** each line the watch prints is one turn of the dispatcher. Kade chose
+client-only batching over a reducer in the broker ("Approve, with client-only batching", "change
+to 30s of interval as a summary window length"; batch everything, nothing bypasses the window).
+
+17. **The client prints a 30 s summary, not one line per event:** `watch.js` gathers the events of
+    a 30 s window into one `SUMMARY` line and acks them after it is written. The backlog found at
+    start is one summary at once. `--window 0` keeps one line per event (section 9). The broker
+    and the consumers do not change.
+
 Decision 6 changes with decision 11: LAN access needs a key now (section 7). Decision 7 stays, with
 one dispatcher per org.
 
@@ -293,6 +302,7 @@ There is no keyless LAN user: `no_auth_user` is removed, and a local dispatcher 
 | EB11-retire: remove `GITHUB`, `watch.sh`, natscli | event-broker, agent-config | open |
 | Decision 16: `main_passed` only green after red, `main_still_passed` otherwise | agent-config #132, event-broker #20 | merged 2026-10-25 |
 | Redeploy the receiver with decision 16 | Kade | done 2026-10-25 |
+| Decision 17: the client's 30 s summary | agent-config, event-broker (`claude/eloquent-pascal-2ve57u`) | open |
 
 **Settled:**
 - The two runtime dependencies `@nats-io/transport-node` and `@nats-io/jetstream` (3.4.0, pinned)
@@ -431,7 +441,7 @@ A new reader is a new row; a new situation is a new signal row; both are a recei
 `client/watch.js` in event-broker replaces `watch.sh` and natscli. It needs Node 22+ and runs from a
 clone of event-broker at a pinned commit, after `npm ci --omit=dev`.
 
-- **Command:** `node client/watch.js --owner <org> [--profile dispatcher] [--json]`.
+- **Command:** `node client/watch.js --owner <org> [--profile dispatcher] [--json] [--window <s>]`.
 - **Settings:** the environment first, then `~/.claude/dispatcher/broker.env` (`KEY=value` lines):
   - `EVENT_BROKER_URL`: `nats://` on the LAN, `wss://` from the cloud;
   - `EVENT_BROKER_OWNER`: `--owner` wins;
@@ -441,12 +451,22 @@ clone of event-broker at a pinned commit, after `npm ci --omit=dev`.
 - **First line:** `WATCH-ARMED <owner> consumer=<profile> unprocessed=<n>`, printed after the
   stream's subjects proved to be `ev.<owner>.>`. A key for another org's account prints
   `BROKER-DOWN key is for another account`.
-- **One line per event:** `<signal> <repo>#<n>` (or `<repo>@<branch>` for branch scope), then
+- **Command (decision 17):** `--window <s>`, default 30. `--window 0` prints one line per event.
+- **The event entry:** `<signal> <repo>#<n>` (or `<repo>@<branch>` for branch scope), then
   `key=value` fields when not null, in this order: `branch`, `sha` (7 characters), `check`, `url`,
   `conclusion` (on `*_other` only), `label`, `state_reason`, `author`, `delivery`. A value holding a
-  space, `"` or `=` is printed as a JSON string. `--json` prints the v2 object instead.
-- **Ack after write:** a message is acked only after its line is written. A write failure exits 3
-  without acking, and the message comes back after the 60 s ack wait. A message seen again (same
+  space, `"` or `=` is printed as a JSON string.
+- **The summary (decision 17):** the first event of a window starts it; when it is 30 s old (the
+  5 s tick, so 30 to 35 s) its events are one line, `SUMMARY <n> events | <entry> | <entry> …`.
+  Events with the same signal, target and check are one entry, the latest, with `count=<k>` when
+  k > 1; entries keep the order of their first event. The backlog counted in `WATCH-ARMED`
+  (`unprocessed=<n>`) is one summary as soon as its n messages are read. With `--window 0` each
+  event is its entry alone, as before. `--json` prints `{"summary": true, "count": <n>, "events":
+  [<v2 object>, …]}`, every event, ungrouped (with `--window 0`, the v2 object).
+- **Ack after write:** a message is acked only after the line holding it is written; 35 s at most
+  stays under the 60 s ack wait. A write failure exits 3 without acking, and the messages come
+  back after the ack wait. A watch that ends with a window open prints and acks nothing of it; the
+  next watch gets those messages. A message seen again (same
   stream sequence, in one process) is acked and not printed again. Across a restart delivery is
   at-least-once: a line written before a kill, with no ack, is printed again.
 - **Heartbeat:** `WATCH-ALIVE <owner> consumer=<profile> unprocessed=<n>` after 600 s with no line
