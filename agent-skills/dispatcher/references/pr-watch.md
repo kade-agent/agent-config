@@ -81,7 +81,7 @@ Every stdout line is one of these:
 - an entry, `<signal> <repo>#<n> key=value…` (`<repo>@<branch>` with no PR or issue). The fields
   follow in this order when not null: `branch`, `sha` (7 characters), `check`, `url`, `red` (on
   `main_failed` and `main_passed`: the workflows failing on that `main`, `-` when none), `label`,
-  `state_reason`, `author`, `delivery`; `count=<k>` closes an entry that stands for k events with
+  `state_reason`, `author`, `line` (a comment's strict DONE or BLOCKED first line), `delivery`; `count=<k>` closes an entry that stands for k events with
   the same signal, target and check (the fields are the latest one's). A value holding a space,
   `"` or `=` is a JSON string. For example:
   `SUMMARY 3 events | ci_failed stella-rain/app#341 branch=claude/z3-orbs sha=9f2c1e0 check=test url=https://github.com/… delivery=1f2e… count=2 | pr_merged stella-rain/core#393 delivery=7a1c…`
@@ -185,7 +185,7 @@ away, before anything else in the wake routine:
 | `ci_failed` | CI failed on `<check>` at `<sha>` (`<url>`): find the root cause and push a validated fix. |
 | `review_changes` | Read the review on `#<pr>` and answer it (worker prompt rule 9). |
 | `review_comment` | Read the review on the PR with gh. If it asks the worker for something, tell the worker (worker prompt rule 9); otherwise nothing. |
-| `pr_comment` | Read it on the PR with gh. From the workers' account and starting with a strict DONE or BLOCKED line for that PR's task: nothing to the worker; act on the line (SKILL.md, 5. Watching) and post it on the sub-issue. Otherwise, if it asks the worker for something, tell the worker (worker prompt rule 9). |
+| `pr_comment` | With `line=` (design decision 23: a strict DONE or BLOCKED first line) and `author=` the workers' account, for that PR's task: nothing to the worker; act on the line (SKILL.md, 5. Watching), with no gh read for the comment, and post it on the sub-issue. Without `line=`, read it on the PR with gh; if it asks the worker for something, tell the worker (worker prompt rule 9). |
 | `issue_closed` on a task's sub-issue | Nothing to the worker. Check on the PR that it merged; then the task is finished. |
 | `issue_labeled` | Nothing to the worker. Check with gh who labeled it; if it was someone else, note it and act on an approval or a block. |
 | `issue_reopened` | Nothing to the worker. Tell Kade. |
