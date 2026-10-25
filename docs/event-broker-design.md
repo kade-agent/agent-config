@@ -100,6 +100,15 @@ below; S2 (the `red` list on `main_*` events) and S3 (a PR snapshot the client r
     repository's `red` list and its PR snapshots, then exits. The reader key may read `STATE`;
     the dispatcher's sweep reads the snapshots first and gh only for what they lack (section 9).
 
+**Added 2026-10-25 (Kade, "1 and 2 together"):**
+
+22. **The snapshot's head is the PR's (S3 fix):** only PR-level events (`pull_request`, `mergeable`,
+    a review) and a `push_branch` to the PR's branch move a snapshot's `sha`; a check or run for
+    another sha is ignored, so a late result from an older head cannot roll it back. Each time
+    the mergeable check reads a PR from GitHub, it writes what it read (head, branch, draft,
+    auto-merge, open/merged/closed, mergeable state) into the snapshot, which repairs drift from
+    lost deliveries at no extra API call (section 9).
+
 Decision 6 changes with decision 11: LAN access needs a key now (section 7). Decision 7 stays, with
 one dispatcher per org.
 
@@ -338,8 +347,9 @@ There is no keyless LAN user: `no_auth_user` is removed, and a local dispatcher 
 | Decision 19 (S1): stream `STATE` for the receiver's state | agent-config #137, event-broker #23 | merged 2026-10-25 |
 | Redeploy with `STATE` (the new `nats-server.conf` permissions) | Kade | next |
 | Decision 20 (S2): `red` on main events | event-broker #24, agent-config #138 | merged 2026-10-25 |
-| Decision 21 (S3): PR snapshots and `watch.js --state` | event-broker #25 (merged 2026-10-25), agent-config #139 | open |
+| Decision 21 (S3): PR snapshots and `watch.js --state` | event-broker #25, agent-config #139 | merged 2026-10-25 |
 | Redeploy with the reader's `STATE` permissions (S3) | Kade | next |
+| Decision 22: the snapshot's head is the PR's; the mergeable read repairs it | agent-config, event-broker (`claude/eloquent-pascal-2ve57u`) | open |
 
 **Settled:**
 - The two runtime dependencies `@nats-io/transport-node` and `@nats-io/jetstream` (3.4.0, pinned)
@@ -458,6 +468,14 @@ event its fields and `state` (`pr_merged` merged, `pr_closed` closed, a reopen o
 open), `mergeable` the state, a check or run `checks[<name>]`, a review `review` (lower case), a
 `pr_comment` `last_comment`. A new `sha` empties `checks`, so they are always the head's. Unknown
 fields are null. Updates run one PR at a time; a failed write is logged, as for every key.
+
+**Whose head (decision 22):** `sha` moves only on a `pull_request`, `mergeable` or review event,
+on a `push_branch` to the snapshot's branch (found through `state.<owner>.<repo>.branch.<branch>`,
+`{"pr"}`, written when a snapshot learns its branch), or on the mergeable check's read of the PR.
+A check or run sets `sha` only while it is null; for any other sha it is ignored. The mergeable
+check writes `sha`, `branch`, `draft`, `auto_merge`, `state` (`merged` when the PR merged,
+`closed` when closed, else `open`) and `mergeable_state` from every PR it reads, even when no
+`mergeable` event is published.
 
 - **Read:** memory first, else the subject's last message (`$JS.API.STREAM.MSG.GET.STATE`); a
   missing key is unknown, as before. A failed read counts as unknown too: at worst one repeat, as
