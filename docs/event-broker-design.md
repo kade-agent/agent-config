@@ -82,6 +82,14 @@ dispatcher"; then "A for both" (leases through the broker; a BLOCKED before any 
     posted. This replaces the 2026-10-24 rule quoted in Why ("sessions should report a message
     to main dispatcher") for DONE, BLOCKED and leases; the dispatcher still messages its workers.
 
+**Added 2026-10-25 (Kade):** "Can receiver have state, so that it can send more useful data to
+nats? Per Org/Repo and topics"; then "the stateful receiver (S1 to S3), proceed this". S1 is
+below; S2 (the `red` list on `main_*` events) and S3 (a PR snapshot the client reads) follow it.
+
+19. **The receiver keeps its state in NATS, stream `STATE` (S1):** the last mergeable state per PR
+    and the last result per workflow on main (decision 16) live in a last-value stream per account
+    instead of only in memory, so a receiver restart repeats nothing (section 9, State).
+
 Decision 6 changes with decision 11: LAN access needs a key now (section 7). Decision 7 stays, with
 one dispatcher per org.
 
@@ -317,6 +325,8 @@ There is no keyless LAN user: `no_auth_user` is removed, and a local dispatcher 
 | Decision 17: the client's 30 s summary | event-broker #21, agent-config #134 and #135 | merged 2026-10-25 |
 | Decision 18: workers report through GitHub, `push_branch` | agent-config, event-broker (`claude/eloquent-pascal-2ve57u`) | open |
 | Redeploy the receiver with `push_branch` | Kade | next |
+| Decision 19 (S1): stream `STATE` for the receiver's state | agent-config, event-broker (`claude/eloquent-pascal-2ve57u`) | open |
+| Redeploy with `STATE` (the new `nats-server.conf` permissions) | Kade | next |
 
 **Settled:**
 - The two runtime dependencies `@nats-io/transport-node` and `@nats-io/jetstream` (3.4.0, pinned)
@@ -413,6 +423,28 @@ The receiver publishes to both streams for every kept event. A failure of either
 GitHub's delivery log shows it. GitHub does not retry (section 3); a delivery redelivered by hand
 within the duplicate window is deduplicated by the message id, and the dispatcher's gh sweep
 (section 6) covers the rest.
+
+### State (decision 19)
+
+Stream `STATE`, one per account beside `GITHUB` and `EVENTS`: subjects `state.<owner>.>`, file
+storage, one message kept per subject (`max_msgs_per_subject` 1), kept 30 days, 4 MiB, discard
+old. Six accounts of `GITHUB`, `EVENTS` and `STATE` come to 981467136 bytes, inside the 1 GB file
+store. The receiver is its only writer and reader in S1.
+
+| Key | Value | Written |
+|---|---|---|
+| `state.<owner>.<repo>.pr.<n>.mergeable` | `{"mergeable_state", "sha"}` | after a `mergeable` event is published |
+| `state.<owner>.<repo>.main.<workflow>` (`token()` of its name) | `{"passed": true \| false}` | after a `main_failed` or `main_passed` / `main_still_passed` is published |
+
+- **Read:** memory first, else the subject's last message (`$JS.API.STREAM.MSG.GET.STATE`); a
+  missing key is unknown, as before. A failed read counts as unknown too: at worst one repeat, as
+  after a restart today.
+- **Write:** after both publishes of the event succeeded, so a delivery answered 503 keeps its
+  signal. A failed write is logged; memory still holds the value until the next restart.
+- **Kept 30 days:** a closed PR's or a removed workflow's key ages out; a workflow that has not run
+  on main for 30 days is unknown again (one `main_passed`).
+- **Permissions:** the receiver user of each account adds `state.<owner>.>` and the `STATE` stream
+  API (`INFO`, `CREATE`, `UPDATE`, `MSG.GET`). The reader gets nothing in S1.
 
 ### Subjects
 
