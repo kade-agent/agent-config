@@ -70,6 +70,18 @@ to 30s of interval as a summary window length"; batch everything, nothing bypass
     start is one summary at once. `--window 0` keeps one line per event (section 9). The broker
     and the consumers do not change.
 
+**Added 2026-10-25 (Kade):** "currently dispatcher let sub-agents send DONE or BLOCKED message to
+main, but I think it should be a fallback of event-broker. Event broker would send all info to
+dispatcher"; then "A for both" (leases through the broker; a BLOCKED before any PR by message).
+
+18. **Workers report through GitHub, and the broker carries it:** a worker posts its strict DONE
+    or BLOCKED line as a comment on its own PR (`pr_comment` reaches the dispatcher), and its
+    pushes are its progress: the receiver publishes `push_branch` for a push to a task branch
+    (`claude/*`, `agent/*`), which the `dispatcher` profile reads in place of `LEASE` messages.
+    `send_message` is the fallback: a BLOCKED before any PR exists, or a comment that cannot be
+    posted. This replaces the 2026-10-24 rule quoted in Why ("sessions should report a message
+    to main dispatcher") for DONE, BLOCKED and leases; the dispatcher still messages its workers.
+
 Decision 6 changes with decision 11: LAN access needs a key now (section 7). Decision 7 stays, with
 one dispatcher per org.
 
@@ -302,7 +314,9 @@ There is no keyless LAN user: `no_auth_user` is removed, and a local dispatcher 
 | EB11-retire: remove `GITHUB`, `watch.sh`, natscli | event-broker, agent-config | open |
 | Decision 16: `main_passed` only green after red, `main_still_passed` otherwise | agent-config #132, event-broker #20 | merged 2026-10-25 |
 | Redeploy the receiver with decision 16 | Kade | done 2026-10-25 |
-| Decision 17: the client's 30 s summary | event-broker #21 (merged 2026-10-25), agent-config #134 | open |
+| Decision 17: the client's 30 s summary | event-broker #21, agent-config #134 and #135 | merged 2026-10-25 |
+| Decision 18: workers report through GitHub, `push_branch` | agent-config, event-broker (`claude/eloquent-pascal-2ve57u`) | open |
+| Redeploy the receiver with `push_branch` | Kade | next |
 
 **Settled:**
 - The two runtime dependencies `@nats-io/transport-node` and `@nats-io/jetstream` (3.4.0, pinned)
@@ -367,9 +381,14 @@ anything else (`cancelled`, `skipped`, `neutral`, `stale`, null).
 | `issues` | `closed`, `reopened`, `labeled` | `issue_closed`, `issue_reopened`, `issue_labeled` |
 | `issue_comment` | on a PR / on an issue | `pr_comment` / `issue_comment` |
 | `push` | to main | `push_main` |
+| `push` | to a task branch (`claude/*`, `agent/*`), not a deletion (decision 18) | `push_branch` |
 
-That is 37 signals. `check_run` and `check_suite` get their own signals so one red run is not three
+That is 38 signals. `check_run` and `check_suite` get their own signals so one red run is not three
 `ci_failed`.
+
+**Task branch pushes (decision 18).** `push_branch` is published to `EVENTS` only; v1 (`GITHUB`)
+keeps dropping pushes to branches other than main. Its subject is branch scope, its `sha` the
+pushed head (`after`); a branch deletion (`deleted`, as after a merge) is dropped.
 
 **Green after red (decision 16).** A pass on main is `main_passed` only when the last completed
 run of that workflow (repository and workflow name) on main that the receiver published was failed,
@@ -424,10 +443,10 @@ The elided fields are the v1 ones, null when they do not apply.
 durable consumer of `EVENTS` with that name: explicit acks, new messages only, a 60 s ack wait,
 `max_ack_pending` 1000, and one filter `ev.<owner>.*.*.*.<signal>` per signal.
 
-- `dispatcher` (17 signals): `pr_merged`, `pr_closed`, `pr_ready`, `pr_draft`, `automerge_off`,
+- `dispatcher` (18 signals): `pr_merged`, `pr_closed`, `pr_ready`, `pr_draft`, `automerge_off`,
   `merge_behind`, `merge_dirty`, `ci_failed`, `main_failed`, `main_passed`, `review_changes`,
   `review_comment`, `issue_closed`, `issue_reopened`, `issue_labeled`, `pr_comment`,
-  `issue_comment`.
+  `issue_comment`, `push_branch`.
 - `all`: every signal (`ev.<owner>.>`), for debugging. Nothing reads it by default.
 
 The `dispatcher` profile leaves out `ci_passed`, `automerge_on`, `merge_clean`, `merge_blocked`,
