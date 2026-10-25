@@ -453,6 +453,9 @@ test("the dispatcher keeps its work items only in <owner>/tasks and relays the w
   // Decision 20 (S2): main events carry red=; the hold lifts on a main_passed with red=-.
   assert.ok(watch.includes("With `red=-`, `main` is green") && watch.includes("`red`") && !watch.includes("(or the receiver restarted)"),
     "pr-watch.md: main_passed lifts the hold on red=-, and the entry fields name red");
+  // Decision 21 (S3): the re-arm sweep reads the PR snapshots first, gh only for what they lack.
+  assert.ok(watch.includes("--state <owner>/<repo>") && watch.includes("gh only for what it lacks"),
+    "pr-watch.md: the re-arm sweep starts from watch.js --state");
   assert.ok(!prompt.includes("Post the same line as a sub-issue comment"), "the worker does not post DONE itself");
   assert.ok(!prompt.includes("NOT VERIFIED: a cloud worker reading"), "the cloud-workers note records what was seen");
 });
