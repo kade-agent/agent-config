@@ -338,7 +338,7 @@ There is no keyless LAN user: `no_auth_user` is removed, and a local dispatcher 
 | Decision 19 (S1): stream `STATE` for the receiver's state | agent-config #137, event-broker #23 | merged 2026-10-25 |
 | Redeploy with `STATE` (the new `nats-server.conf` permissions) | Kade | next |
 | Decision 20 (S2): `red` on main events | event-broker #24, agent-config #138 | merged 2026-10-25 |
-| Decision 21 (S3): PR snapshots and `watch.js --state` | agent-config, event-broker (`claude/eloquent-pascal-2ve57u`) | open |
+| Decision 21 (S3): PR snapshots and `watch.js --state` | event-broker #25 (merged 2026-10-25), agent-config #139 | open |
 | Redeploy with the reader's `STATE` permissions (S3) | Kade | next |
 
 **Settled:**
