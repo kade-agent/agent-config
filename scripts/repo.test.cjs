@@ -419,3 +419,31 @@ test("the dispatcher runs lanes of sub-issues in <owner>/tasks with plans as fil
   }
   assert.ok(!watch.includes("not issue events yet"), "pr-watch.md no longer says the broker lacks issue events");
 });
+
+// Kade (agent-config#130, 2026-10-25): dispatcher work items live only in `<owner>/tasks`, a product
+// repository's issues are its own, and workers usually cannot write to `<owner>/tasks`, so their
+// LEASE/DONE/BLOCKED lines go to the dispatcher, which posts them on the sub-issue.
+test("the dispatcher keeps its work items only in <owner>/tasks and relays the workers' lines", () => {
+  const dir = path.join(ROOT, "agent-skills", "dispatcher");
+  const skill = fs.readFileSync(path.join(dir, "SKILL.md"), "utf8").replace(/\s+/g, " ");
+  for (const p of ["Only in `<owner>/tasks`", "the queue issue, its epics, every task sub-issue",
+    "every follow-up the dispatcher will plan", "never opens a work item in a product repository",
+    "A product repository's issues are its own", "`cmd:` checks",
+    "never a bare `#<n>`", "only when a user's token makes the merge", "`auto-merge.yml`",
+    "the dispatcher closes the sub-issue once it has confirmed the merge or the green draft",
+    "`gh issue transfer`", "needs GraphQL", "`gh label clone`", "re-check the sub-issue links",
+    "old → new numbers",
+    "`LEASE <task id> until <UTC time>: <step>`", "post DONE and BLOCKED on the sub-issue",
+    "A lease counts from its message"]) {
+    assert.ok(skill.includes(p), `SKILL.md says: ${p}`);
+  }
+  const prompt = fs.readFileSync(path.join(dir, "references", "worker-prompt.md"), "utf8").replace(/\s+/g, " ");
+  for (const p of ["`LEASE <task id> until <UTC time, 2 hours ahead>: <step done>`",
+    "only if the session can write there", "`Closes <owner>/tasks#<n>`, never a bare `#<n>`",
+    "The dispatcher posts the DONE or BLOCKED line on the sub-issue",
+    "cloud workers could not write to `<owner>/tasks` (2026-10-25)", "relays the worker's lines"]) {
+    assert.ok(prompt.includes(p), `the worker prompt says: ${p}`);
+  }
+  assert.ok(!prompt.includes("Post the same line as a sub-issue comment"), "the worker does not post DONE itself");
+  assert.ok(!prompt.includes("NOT VERIFIED: a cloud worker reading"), "the cloud-workers note records what was seen");
+});
