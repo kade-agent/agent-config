@@ -332,7 +332,7 @@ There is no keyless LAN user: `no_auth_user` is removed, and a local dispatcher 
 | Redeploy the receiver with `push_branch` | Kade | next |
 | Decision 19 (S1): stream `STATE` for the receiver's state | agent-config #137, event-broker #23 | merged 2026-10-25 |
 | Redeploy with `STATE` (the new `nats-server.conf` permissions) | Kade | next |
-| Decision 20 (S2): `red` on main events | agent-config, event-broker (`claude/eloquent-pascal-2ve57u`) | open |
+| Decision 20 (S2): `red` on main events | event-broker #24 (merged 2026-10-25), agent-config #138 | open |
 
 **Settled:**
 - The two runtime dependencies `@nats-io/transport-node` and `@nats-io/jetstream` (3.4.0, pinned)
