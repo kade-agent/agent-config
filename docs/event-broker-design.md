@@ -362,7 +362,7 @@ There is no keyless LAN user: `no_auth_user` is removed, and a local dispatcher 
 | Decision 21 (S3): PR snapshots and `watch.js --state` | event-broker #25, agent-config #139 | merged 2026-10-25 |
 | Redeploy with the reader's `STATE` permissions (S3) | Kade | next |
 | Decision 22: the snapshot's head is the PR's; the mergeable read repairs it | agent-config #140, event-broker #26 | merged 2026-10-25 |
-| Decision 23: a comment's DONE/BLOCKED line in its event | agent-config, event-broker (`claude/eloquent-pascal-2ve57u`) | open |
+| Decision 23: a comment's DONE/BLOCKED line in its event | event-broker #27 (merged 2026-10-25), agent-config (this PR) | open |
 
 **Settled:**
 - The two runtime dependencies `@nats-io/transport-node` and `@nats-io/jetstream` (3.4.0, pinned)
