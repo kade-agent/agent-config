@@ -96,7 +96,7 @@ Auto-merge merges a worker's PR when it is green, with no other review, so each 
 
 **When a task is finished.** Only when its DONE has arrived **and** its PR is merged. Close its sub-issue if the merge did not (see Closing in Lanes and tasks). A draft PR for Kade is finished when its CI is green; close its sub-issue then.
 
-**PR events.** While any task has a PR, keep one PR watch running, as `references/pr-watch.md` says. It subscribes to the NAS event broker, or falls back to a gh poll, with a single-instance guard and a re-arm before 30 minutes. A merge, a conflict or a red run sends the worker a `SendMessage` at once.
+**PR events.** While any task has a PR, keep one PR watch running, as `references/pr-watch.md` says. It subscribes to the NAS event broker, or falls back to a gh poll, with a single-instance guard and a re-arm before 30 minutes. A merge, a conflict or a red run sends the worker a `SendMessage` at once. When the last open task's PR merges, stop the watch and do not re-arm it; when no task is open either, cancel the check-in. Arm both again when the next task opens a PR.
 
 **On every wake.** A wake is a worker's message, Kade's message, or a check-in:
 1. Read the notifications. Act on each DONE or BLOCKED.
@@ -130,7 +130,9 @@ When a task is DONE, dispatch whatever it unblocked.
 
 ## 7. Reporting
 
-- After each event, report briefly: what merged (PR, the key numbers, what was NOT VERIFIED), what is running, what waits on Kade.
+- Report an event only when it changes something: a merge, a DONE or BLOCKED, a red check, a conflict, a hold set or lifted, or something new that waits on Kade. Then report briefly: what merged (PR, the key numbers, what was NOT VERIFIED), what is running, what waits on Kade.
+- An event that needs no action ends the turn with no message: a pass on `main` while it is green, an echo of your own comment, a repeat. The next real report covers it if it matters.
+- Put a pending question or recommendation (the next task, a handoff) to Kade once. Do not repeat it in later replies until something changes it.
 - Never report a gate a worker could not run as passed. Relay its `NOT VERIFIED` lines.
 
 ## 8. Stopping

@@ -291,8 +291,8 @@ There is no keyless LAN user: `no_auth_user` is removed, and a local dispatcher 
 | EB11-switch: `pr-watch.md` on the client | agent-config #129 | open (draft) |
 | Release and live check | Kade | next |
 | EB11-retire: remove `GITHUB`, `watch.sh`, natscli | event-broker, agent-config | open |
-| Decision 16: `main_passed` only green after red, `main_still_passed` otherwise | agent-config, event-broker (`claude/eloquent-pascal-2ve57u`) | open |
-| Redeploy the receiver with decision 16 | Kade | next |
+| Decision 16: `main_passed` only green after red, `main_still_passed` otherwise | agent-config #132, event-broker #20 | merged 2026-10-25 |
+| Redeploy the receiver with decision 16 | Kade | done 2026-10-25 |
 
 **Settled:**
 - The two runtime dependencies `@nats-io/transport-node` and `@nats-io/jetstream` (3.4.0, pinned)
