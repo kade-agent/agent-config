@@ -90,6 +90,11 @@ below; S2 (the `red` list on `main_*` events) and S3 (a PR snapshot the client r
     and the last result per workflow on main (decision 16) live in a last-value stream per account
     instead of only in memory, so a receiver restart repeats nothing (section 9, State).
 
+20. **Main events say which workflows are still red (S2):** the receiver keeps the list of
+    workflows failing on each repository's main in `STATE`, and every v2 `main_failed`,
+    `main_passed` and `main_still_passed` carries it as `red`. The client prints `red=`; the
+    dispatcher lifts its "main is red" hold on a `main_passed` whose `red` is empty (section 9).
+
 Decision 6 changes with decision 11: LAN access needs a key now (section 7). Decision 7 stays, with
 one dispatcher per org.
 
@@ -325,8 +330,9 @@ There is no keyless LAN user: `no_auth_user` is removed, and a local dispatcher 
 | Decision 17: the client's 30 s summary | event-broker #21, agent-config #134 and #135 | merged 2026-10-25 |
 | Decision 18: workers report through GitHub, `push_branch` | agent-config, event-broker (`claude/eloquent-pascal-2ve57u`) | open |
 | Redeploy the receiver with `push_branch` | Kade | next |
-| Decision 19 (S1): stream `STATE` for the receiver's state | agent-config, event-broker (`claude/eloquent-pascal-2ve57u`) | open |
+| Decision 19 (S1): stream `STATE` for the receiver's state | agent-config #137, event-broker #23 | merged 2026-10-25 |
 | Redeploy with `STATE` (the new `nats-server.conf` permissions) | Kade | next |
+| Decision 20 (S2): `red` on main events | event-broker #24 (merged 2026-10-25), agent-config #138 | open |
 
 **Settled:**
 - The two runtime dependencies `@nats-io/transport-node` and `@nats-io/jetstream` (3.4.0, pinned)
@@ -435,10 +441,16 @@ store. The receiver is its only writer and reader in S1.
 |---|---|---|
 | `state.<owner>.<repo>.pr.<n>.mergeable` | `{"mergeable_state", "sha"}` | after a `mergeable` event is published |
 | `state.<owner>.<repo>.main.<workflow>` (`token()` of its name) | `{"passed": true \| false}` | after a `main_failed` or `main_passed` / `main_still_passed` is published |
+| `state.<owner>.<repo>.red` (decision 20) | `{"red": [<workflow name>, …]}`, sorted | the same, adding or removing that workflow |
 
 - **Read:** memory first, else the subject's last message (`$JS.API.STREAM.MSG.GET.STATE`); a
   missing key is unknown, as before. A failed read counts as unknown too: at worst one repeat, as
   after a restart today.
+- **`red` on the event (decision 20):** every v2 `main_failed`, `main_passed` and
+  `main_still_passed` carries `"red": [...]`, the list as it stands once this event counts (its
+  own workflow added on a failure, removed on a pass). Two runs finishing together may each miss
+  the other in their `red`; the stored list is updated one repository at a time, so it stays
+  right, and the next main event carries it.
 - **Write:** after both publishes of the event succeeded, so a delivery answered 503 keeps its
   signal. A failed write is logged; memory still holds the value until the next restart.
 - **Kept 30 days:** a closed PR's or a removed workflow's key ages out; a workflow that has not run
@@ -505,7 +517,8 @@ clone of event-broker at a pinned commit, after `npm ci --omit=dev`.
 - **Command (decision 17):** `--window <s>`, default 30. `--window 0` prints one line per event.
 - **The event entry:** `<signal> <repo>#<n>` (or `<repo>@<branch>` for branch scope), then
   `key=value` fields when not null, in this order: `branch`, `sha` (7 characters), `check`, `url`,
-  `conclusion` (on `*_other` only), `label`, `state_reason`, `author`, `delivery`. A value holding a
+  `conclusion` (on `*_other` only), `red` (on `main_*`: the names joined by `,`, `-` when none;
+  decision 20), `label`, `state_reason`, `author`, `delivery`. A value holding a
   space, `"` or `=` is printed as a JSON string.
 - **The summary (decision 17):** the first event of a window starts it; when it is 30 s old (the
   5 s tick, so 30 to 35 s) its events are one line, `SUMMARY <n> events | <entry> | <entry> …`.
