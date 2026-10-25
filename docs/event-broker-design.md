@@ -275,13 +275,13 @@ There is no keyless LAN user: `no_auth_user` is removed, and a local dispatcher 
 | New keys and redeploy | Kade | open |
 | The App: Issues read, `issues` and `issue_comment` subscriptions, installed on each `<owner>/tasks`; receiver redeploy | Kade | next |
 | The cloud websocket route and the cloud environment (variables, network, setup script) | Kade | next |
-| v2 design: this doc's section 9 (EB11-doc) | agent-config #128 | open |
-| EB11-signals: the receiver computes each event's signal | event-broker | open |
-| EB11-stream: stream `EVENTS` beside `GITHUB`, profile consumers | event-broker | open |
-| EB11-client: `client/watch.js` and `src/profiles.js` | event-broker | open |
-| Redeploy with `EVENTS` | Kade | open |
-| EB11-switch: `pr-watch.md` on the client | agent-config | open |
-| Release and live check | Kade | open |
+| v2 design: this doc's section 9 (EB11-doc) | agent-config #128 | merged 2026-10-25 |
+| EB11-signals: the receiver computes each event's signal | event-broker #17 | merged 2026-10-25 |
+| EB11-stream: stream `EVENTS` beside `GITHUB`, profile consumers | event-broker #18 | merged 2026-10-25 |
+| EB11-client: `client/watch.js` and `src/profiles.js` | event-broker #19 | merged 2026-10-25 |
+| Redeploy with `EVENTS` | Kade | done 2026-10-25 |
+| EB11-switch: `pr-watch.md` on the client | agent-config #129 | open (draft) |
+| Release and live check | Kade | next |
 | EB11-retire: remove `GITHUB`, `watch.sh`, natscli | event-broker, agent-config | open |
 
 **Settled:**
