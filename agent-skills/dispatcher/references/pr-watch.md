@@ -109,31 +109,27 @@ and the print.
   JetStream splits its messages among every reader. So one dispatcher reads the consumer at a
   time. A second dispatcher of the org uses the gh-poll fallback. Any test that reads the
   consumer takes events away from the dispatcher.
-- **Filtered.** The consumer carries filters (design section 6): only PR events (`pull_request`,
-  `workflow_run`, `mergeable`, `pull_request_review`, `issue_comment`), the org's issue events,
-  branch `workflow_run` and pushes arrive. `check_run` and `check_suite` never do, whatever the
-  event list above says.
-- **The CLI.** `watch.sh` runs the `nats` CLI, natscli 0.5.0. On Windows, `nats.exe` comes from
-  `nats-0.5.0-windows-amd64.zip` in the natscli releases, with its folder on the user's `PATH`,
-  and the app restarted. (`NATS_BIN` can point to it directly.) In the cloud, the setup script
-  installs it (below).
-- **Checked live** (2026-10-24, before the per-org accounts; the LAN needed no key then):
-  - on Kade's PC, over the LAN with no key, the consumer gave a real stella-rain/app
-    `workflow_run` and acked it;
-  - event-broker's CI ran `watch.sh` against nats-server over the LAN with no key, and over
-    websocket with the seed written from the variable.
-
-  Since the accounts: event-broker#12's CI reads the per-account filtered consumers with the
-  reader keys.
+- **Profiles.** The consumer `dispatcher` of stream `EVENTS` carries one filter per signal of the
+  profile (design section 9): the 17 signals of the table below arrive and nothing else. A reader
+  that needs another signal is a new profile row and a receiver redeploy, not a change here. The
+  client's `--profile` defaults to `dispatcher`; the profile `all` (every signal) is for
+  debugging, and like any test read it takes events away from the dispatcher.
+- **The client.** `watch.js` needs Node 22+ and the clone's `npm ci --omit=dev`; there is no CLI to
+  install and no `PATH` to set. `--json` prints the v2 object instead of the line.
+- **Checked live.** Not yet: the client is NOT VERIFIED until Kade's release and live check, where a
+  Monitor on the PC and one in the cloud print `WATCH-ARMED`, then real events as signal lines. What
+  was checked earlier: a cloud session reached the NAS over `wss://` from Node (`wsconnect`, a reader
+  key, with or without `NODE_USE_ENV_PROXY`), and the v1 watch worked from the PC and from the cloud.
 
 ## The gh-poll fallback
 
-Use it when `EVENT_BROKER_URL` is unset, or when `BROKER-DOWN` comes twice in a row. The poll runs
+Use it when `EVENT_BROKER_URL` is unset, when no `WATCH-ARMED` comes within 30 s, or when
+`BROKER-DOWN` comes twice in a row. The poll runs
 as a `Monitor` command:
 
 - Every 60 s, run `gh pr list` on each queue repository for `claude/*` PRs.
 - Print one line when a PR changes to merged, closed, `DIRTY`, `BEHIND`, or a failed check.
-- It uses the same `watch.pid` pidfile as `watch.sh`. It writes its process id there first, and
+- It uses the same pidfile as `watch.js` (`watch-<org>.pid`). It writes its process id there first, and
   exits once the file holds another one. It keeps its own state file.
 - The re-arm rule is the same. On each re-arm, try the broker first.
 
@@ -193,32 +189,45 @@ there. Conflicts between two open PRs are not in these events: the `git merge-tr
 The cloud environment's settings:
 
 - **Variables:** `EVENT_BROKER_URL=wss://<nats host>`,
-  `EVENT_BROKER_NKEY_FILE=/root/.event-broker.nk`, and `EVENT_BROKER_CLOUD_SEED` (the org's
-  `reader-<owner>` seed: read-only on the org's account, revoked by replacing
-  `READER_NKEY_<OWNER>` on the NAS).
+  `EVENT_BROKER_NKEY_FILE=/root/.event-broker.nk` (as the environment sets it), and
+  `EVENT_BROKER_CLOUD_SEED` (the org's `reader-<owner>` seed: read-only on the org's account,
+  revoked by replacing `READER_NKEY_<OWNER>` on the NAS).
 - **Network access:** allows `<nats host>`.
-- **Setup script:** installs the pinned CLI and nothing else:
+- **Setup script:** installs the pinned client and nothing else:
   ```bash
-  curl -fsSL https://raw.githubusercontent.com/kade-agent/event-broker/132276d9cb17d3759acfdc87a8ce365bd6ac98e4/client/install-nats.sh | bash
+  git clone https://github.com/kade-agent/event-broker /root/event-broker && git -C /root/event-broker checkout --detach 72c07448cc43b805a8b8c787fee41d8ad0fe0e51 && npm ci --omit=dev --prefix /root/event-broker
   ```
+- **Monitor command:**
+  `node /root/event-broker/client/watch.js --owner <org> --profile dispatcher`.
 
 A setup script cannot see the environment's variables, so it never writes the seed. Instead,
-`watch.sh` writes the key file from `EVENT_BROKER_CLOUD_SEED` when the watch starts, at mode 600,
-and never prints it. The CLI version is pinned because the GitHub "latest release" API answers
-403 from the sandbox.
+`watch.js` writes the key file from `EVENT_BROKER_CLOUD_SEED` when it starts and the file is
+missing, at mode 600, and never prints it. The first line, `WATCH-ARMED`, is also the check that
+the path works: it counts the messages waiting without taking one.
 
-To check the path without taking an event:
+Verified live 2026-10-25 with the v1 watch: a cloud session read `issue_comment`, `issues`
+`closed` and a `workflow_run` on `main` within seconds over websocket with the stella-rain reader
+key. A cloud dispatcher uses the broker like a local one.
+
+## Stopping a Monitor
+
+The client ends with its parent, but after stopping a Monitor, check that no `watch.js` process is
+left, and stop any leftover:
 
 ```bash
-nats --server "$EVENT_BROKER_URL" --nkey "$EVENT_BROKER_NKEY_FILE" consumer info GITHUB dispatcher
+pgrep -f client/watch.js
 ```
 
-Run it after the first watch has written the key file. On the LAN it works the same way, with
-`EVENT_BROKER_URL` the LAN address and the key file of the `reader-<owner>` seed.
+On Windows:
 
-Verified live 2026-10-25: a cloud session ran `watch.sh` over websocket with the stella-rain reader
-key and received `issue_comment`, `issues` `closed` and a `workflow_run` on `main` within seconds. A
-cloud dispatcher uses the broker like a local one.
+```powershell
+Get-CimInstance Win32_Process -Filter "Name='node.exe'" | Where-Object CommandLine -like '*watch.js*'
+```
 
-To move to a newer `watch.sh` or `install-nats.sh`, merge it in event-broker first, then change
-the commit in both links above in an agent-config PR.
+## Moving the pin and v1
+
+To move to a newer client, merge it in event-broker first, then change the commit in both install
+lines above (local and cloud) in an agent-config PR; keep the two the same.
+
+v1, until EB11-retire: `client/watch.sh` and natscli 0.5.0 read the old stream `GITHUB` and install
+with `client/install-nats.sh`. This file no longer arms them. Never run both watches for one org.
