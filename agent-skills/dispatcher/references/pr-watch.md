@@ -36,13 +36,13 @@ The client prints it as one entry of a summary line (see The lines below). Its f
 ## Arming the broker Monitor
 
 The watch is event-broker's `client/watch.js`, a Node 22+ program run from a clone of
-`kade-agent/event-broker` at a reviewed commit (`b1419ae91f893765127ef5be603deb675a176ebe`).
+`kade-agent/event-broker` at a reviewed commit (`795fafdadd7dece5121753fdf493f1e8740c0c66`).
 Install it once per pin, on the PC:
 
 ```bash
 d="$HOME/.claude/dispatcher/event-broker"
 if [ -d "$d/.git" ]; then git -C "$d" fetch origin; else git clone https://github.com/kade-agent/event-broker "$d"; fi
-git -C "$d" checkout --detach b1419ae91f893765127ef5be603deb675a176ebe
+git -C "$d" checkout --detach 795fafdadd7dece5121753fdf493f1e8740c0c66
 npm ci --omit=dev --prefix "$d"
 ```
 
@@ -107,8 +107,17 @@ watch gets those events.
   after the 60 s ack wait with the same `delivery`. A message lost between GitHub and the broker is
   caught by the gh sweep below.
 - **Re-arm.** A Monitor lasts at most 30 minutes. Re-arm about every 25 minutes, and at once when
-  it ends or prints `BROKER-DOWN`. On every re-arm, run one gh sweep of the open PRs in your table,
-  to catch anything the broker never received: GitHub does not retry a failed delivery.
+  it ends or prints `BROKER-DOWN`. On every re-arm, sweep the open PRs in your table, to catch
+  anything the broker never received: GitHub does not retry a failed delivery. Start with each
+  repository's snapshot (design decision 21), which prints its `red` list and, per PR, the state,
+  head sha, mergeable state, the checks on the head, the last review and the last comment's author:
+
+  ```bash
+  node "$HOME/.claude/dispatcher/event-broker/client/watch.js" --owner <org> --state <owner>/<repo>
+  ```
+
+  Then run gh only for what it lacks: a PR it does not list, comment text (DONE and BLOCKED lines),
+  or a value that disagrees with what you saw. Before acting on a merge, confirm it with gh.
 - **Single instance.** The client writes its process id to the pidfile, and the newest instance
   wins: an older watch left running by an expired Monitor ends quietly on its next pass. The pidfile
   is per org, so two orgs on one machine do not disturb each other, each with its own key file. A
@@ -209,7 +218,7 @@ The cloud environment's settings:
 - **Network access:** allows `<nats host>`.
 - **Setup script:** installs the pinned client and nothing else:
   ```bash
-  git clone https://github.com/kade-agent/event-broker /root/event-broker && git -C /root/event-broker checkout --detach b1419ae91f893765127ef5be603deb675a176ebe && npm ci --omit=dev --prefix /root/event-broker
+  git clone https://github.com/kade-agent/event-broker /root/event-broker && git -C /root/event-broker checkout --detach 795fafdadd7dece5121753fdf493f1e8740c0c66 && npm ci --omit=dev --prefix /root/event-broker
   ```
 - **Monitor command:**
   `node /root/event-broker/client/watch.js --owner <org> --profile dispatcher`.
