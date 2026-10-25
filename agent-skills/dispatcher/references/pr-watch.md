@@ -185,7 +185,7 @@ away, before anything else in the wake routine:
 | `ci_failed` | CI failed on `<check>` at `<sha>` (`<url>`): find the root cause and push a validated fix. |
 | `review_changes` | Read the review on `#<pr>` and answer it (worker prompt rule 9). |
 | `review_comment` | Read the review on the PR with gh. If it asks the worker for something, tell the worker (worker prompt rule 9); otherwise nothing. |
-| `pr_comment` | With `line=` (design decision 23: a strict DONE or BLOCKED first line) and `author=` the workers' account, for that PR's task: nothing to the worker; act on the line (SKILL.md, 5. Watching), with no gh read for the comment, and post it on the sub-issue. Without `line=`, read it on the PR with gh; if it asks the worker for something, tell the worker (worker prompt rule 9). |
+| `pr_comment` | With `line=` (design decision 23: the comment starting with a strict DONE or BLOCKED line) and `author=` the workers' account, for that PR's task: nothing to the worker; act on the line (SKILL.md, 5. Watching), with no gh read for the comment, and post it on the sub-issue. Without `line=`, read it on the PR with gh; if it asks the worker for something, tell the worker (worker prompt rule 9). |
 | `issue_closed` on a task's sub-issue | Nothing to the worker. Check on the PR that it merged; then the task is finished. |
 | `issue_labeled` | Nothing to the worker. Check with gh who labeled it; if it was someone else, note it and act on an approval or a block. |
 | `issue_reopened` | Nothing to the worker. Tell Kade. |
