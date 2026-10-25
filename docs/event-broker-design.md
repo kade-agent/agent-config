@@ -303,3 +303,83 @@ There is no keyless LAN user: `no_auth_user` is removed, and a local dispatcher 
   - a cloud environment's setup script cannot see the environment's variables, so
     `client/watch.sh` writes the seed file when the watch starts;
   - the GitHub "latest release" API answers 403 from the sandbox, so the CLI is pinned.
+
+## 9. v2: signals, profiles and the client
+
+Added 2026-10-25 (decisions 13 to 15). Sections 4 and 6 stay as v1 until EB11-retire; this section
+is what the code is built to. Later tasks (EB11-signals, EB11-stream, EB11-client, EB11-switch) are
+pinned to it.
+
+### Signals
+
+The receiver computes one signal per kept event. "main" is the repository's default branch
+(`repository.default_branch` in the payload). A conclusion is **failed** when it is `failure`,
+`timed_out`, `action_required` or `startup_failure`; **passed** when it is `success`; **other** for
+anything else (`cancelled`, `skipped`, `neutral`, `stale`, null).
+
+| Source | When | Signal |
+|---|---|---|
+| `pull_request` | `closed`, merged / not merged | `pr_merged` / `pr_closed` |
+| `pull_request` | `ready_for_review`, `converted_to_draft` | `pr_ready`, `pr_draft` |
+| `pull_request` | `auto_merge_enabled`, `auto_merge_disabled` | `automerge_on`, `automerge_off` |
+| `mergeable` | `mergeable_state` `behind`, `dirty`, `clean`, `blocked`, `unstable`, `draft`; else | `merge_<state>`; `merge_other` |
+| `workflow_run` | with a PR: failed / passed / other | `ci_failed` / `ci_passed` / `ci_other` |
+| `workflow_run` | no PR, on main | `main_failed` / `main_passed` / `main_other` |
+| `workflow_run` | no PR, another branch | `branch_failed` / `branch_passed` / `branch_other` |
+| `check_run`, `check_suite` | any branch | `check_failed` / `check_passed` / `check_other` |
+| `pull_request_review` | state `changes_requested`, `commented`, `approved`, `dismissed`; else | `review_changes`, `review_comment`, `review_approved`, `review_dismissed`; `review_other` |
+| `issues` | `closed`, `reopened`, `labeled` | `issue_closed`, `issue_reopened`, `issue_labeled` |
+| `issue_comment` | on a PR / on an issue | `pr_comment` / `issue_comment` |
+| `push` | to main | `push_main` |
+
+That is 36 signals. `check_run` and `check_suite` get their own signals so one red run is not three
+`ci_failed`.
+
+### Stream `EVENTS`
+
+One per account, beside `GITHUB`:
+
+- subjects `ev.<owner>.>`, file storage, kept 7 days, discard old;
+- a 2-minute duplicate window keyed by the same message id as v1;
+- `max_bytes` 24 MiB (25165824) while v1 runs, 128 MiB after EB11-retire. Six orgs of `GITHUB`
+  128 MiB plus `EVENTS` 24 MiB come to 956301312 bytes, which fit the 1 GB file store.
+
+The receiver publishes to both streams for every kept event. A failure of either answers 503, so
+GitHub's delivery log shows it and a redelivery is deduplicated by the message id.
+
+### Subjects
+
+`ev.<owner>.<repo>.<scope>.<id>.<signal>`, always six tokens. `<scope>` is:
+
+- `pr`: `<id>` is the PR number;
+- `issue`: `<id>` is the issue number;
+- `branch`: `<id>` is the branch, through `token()`; for a branch check and a `push`.
+
+The owner is lower-cased; repo and branch go through `token()` as in v1 (section 4). `mergeable`
+messages carry their message id in `delivery`, so every v2 message has one.
+
+### Message
+
+The v1 object (section 4) plus `"v": 2` and `"signal"`:
+
+```json
+{"v": 2, "signal": "ci_failed", "delivery": "1f2e…", "repo": "stella-rain/app", "pr": 341,
+ "branch": "claude/z3-orbs", "event": "workflow_run", "action": "completed", "conclusion": "failure",
+ "sha": "9f2c1e0", "check": {"name": "test", "url": "https://github.com/…"}, "…": null}
+```
+
+The elided fields are the v1 ones, null when they do not apply.
+
+### Profiles
+
+`src/profiles.js` in event-broker is a table of profile name to signals. Each profile becomes a
+durable consumer of `EVENTS` with that name: explicit acks, new messages only, a 60 s ack wait,
+`max_ack_pending` 1000, and one filter `ev.<owner>.*.*.*.<signal>` per signal.
+
+- `dispatcher` (17 signals): `pr_merged`, `pr_closed`, `pr_ready`, `pr_draft`, `automerge_off`,
+  `merge_behind`, `merge_dirty`, `ci_failed`, `main_failed`, `main_passed`, `review_changes`,
+  `review_comment`, `issue_closed`, `issue_reopened`, `issue_labeled`, `pr_comment`,
+  `issue_comment`.
+- `all`: every signal (`ev.<owner>.>`), for debugging. Nothing reads it by default.
+
+A new reader is a new row; a new situation is a new signal row; both are a receiver redeploy.
