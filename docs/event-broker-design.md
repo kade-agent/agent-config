@@ -45,7 +45,7 @@ I'd accept big change, since it's a starting stage"; "make a dispatcher plan for
 on the PC; "Pinned clone"; "Side by side". The findings are event-broker #15 and #16; section 9
 replaces their proposals.
 
-13. **The receiver names each event's signal and publishes it to a second stream `EVENTS`; each
+13. **The receiver names each event's signal and publishes it to a second stream `EVENTS` (one per account, beside `GITHUB`); each
     reader profile is a server-side consumer** with a list of signals. A reader no longer carries
     a subject filter list of its own, and a new reader or a new situation is a table row.
 14. **A Node client replaces `watch.sh` and natscli**, run from a clone of event-broker at a
@@ -358,10 +358,13 @@ One per account, beside `GITHUB`:
 - subjects `ev.<owner>.>`, file storage, kept 7 days, discard old;
 - a 2-minute duplicate window keyed by the same message id as v1;
 - `max_bytes` 24 MiB (25165824) while v1 runs, 128 MiB after EB11-retire. Six orgs of `GITHUB`
-  128 MiB plus `EVENTS` 24 MiB come to 956301312 bytes, which fit the 1 GB file store.
+  128 MiB plus `EVENTS` 24 MiB come to 956301312 bytes, which fit the 1 GB file store (sized for
+  six; four owners are allowed today, section 3).
 
 The receiver publishes to both streams for every kept event. A failure of either answers 503, so
-GitHub's delivery log shows it and a redelivery is deduplicated by the message id.
+GitHub's delivery log shows it. GitHub does not retry (section 3); a delivery redelivered by hand
+within the duplicate window is deduplicated by the message id, and the dispatcher's gh sweep
+(section 6) covers the rest.
 
 ### Subjects
 
@@ -398,6 +401,10 @@ durable consumer of `EVENTS` with that name: explicit acks, new messages only, a
   `issue_comment`.
 - `all`: every signal (`ev.<owner>.>`), for debugging. Nothing reads it by default.
 
+The `dispatcher` profile leaves out `ci_passed`, `automerge_on`, `merge_clean`, `merge_blocked`,
+`merge_unstable`, `merge_draft`, `merge_other`, `review_approved`, `review_dismissed` and the
+`*_other` signals. A reader that needs one is a new row.
+
 A new reader is a new row; a new situation is a new signal row; both are a receiver redeploy.
 
 ### The client
@@ -421,7 +428,8 @@ clone of event-broker at a pinned commit, after `npm ci --omit=dev`.
   space, `"` or `=` is printed as a JSON string. `--json` prints the v2 object instead.
 - **Ack after write:** a message is acked only after its line is written. A write failure exits 3
   without acking, and the message comes back after the 60 s ack wait. A message seen again (same
-  stream sequence) is acked and not printed again.
+  stream sequence, in one process) is acked and not printed again. Across a restart delivery is
+  at-least-once: a line written before a kill, with no ack, is printed again.
 - **Heartbeat:** `WATCH-ALIVE <owner> consumer=<profile> unprocessed=<n>` after 600 s with no line
   printed.
 - **Failure:** `BROKER-DOWN <why>` and exit 1 after two failed connects 5 s apart, a disconnect
