@@ -456,6 +456,9 @@ test("the dispatcher keeps its work items only in <owner>/tasks and relays the w
   // Decision 21 (S3): the re-arm sweep reads the PR snapshots first, gh only for what they lack.
   assert.ok(watch.includes("--state <owner>/<repo>") && watch.includes("gh only for what it lacks"),
     "pr-watch.md: the re-arm sweep starts from watch.js --state");
+  // Decision 23: a strict DONE/BLOCKED line rides in the comment event as line=.
+  assert.ok(watch.includes("`line=`") && watch.includes("no gh read"),
+    "pr-watch.md: pr_comment acts on line= without a gh read");
   assert.ok(!prompt.includes("Post the same line as a sub-issue comment"), "the worker does not post DONE itself");
   assert.ok(!prompt.includes("NOT VERIFIED: a cloud worker reading"), "the cloud-workers note records what was seen");
 });
