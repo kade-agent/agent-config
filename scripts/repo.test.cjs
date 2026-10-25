@@ -433,7 +433,7 @@ test("the dispatcher keeps its work items only in <owner>/tasks and relays the w
     "the dispatcher closes the sub-issue once it has confirmed the merge or the green draft",
     "`gh issue transfer`", "needs GraphQL", "`gh label clone`", "re-check the sub-issue links",
     "old → new numbers",
-    "`LEASE <task id> until <UTC time>: <step>`", "post DONE and BLOCKED on the sub-issue",
+    "`LEASE <task id> until <UTC time>: <step>`", "posts DONE and BLOCKED on the sub-issue",
     "A lease counts from its message"]) {
     assert.ok(skill.includes(p), `SKILL.md says: ${p}`);
   }
