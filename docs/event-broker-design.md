@@ -69,6 +69,7 @@ worker pushes / merges ─▶ GitHub ─(App webhook, HMAC)─▶ receiver (Node
                                                      ▼
                                    NATS JetStream, one account per allowed owner, each with
                                    stream GITHUB (github.<owner>.>, 7 days, 2-min dedupe)
+                                   and, from v2, stream EVENTS (ev.<owner>.>, section 9)
                                       ├─ LAN    nats://<LAN address>:4222  reader-<owner> NKey
                                       └─ public wss://<nas domain>/nats    reader-<owner> NKey
                                                      ▼
@@ -107,6 +108,8 @@ address and is never forwarded.
 - GitHub does not retry a failed delivery on its own. Section 6 covers that gap.
 
 ## 4. Events
+
+*v1, until EB11-retire; v2 is section 9.*
 
 **Subjects:**
 - `github.<org>.<repo>.pr.<n>.<event>`;
@@ -192,6 +195,8 @@ What this cannot see, and what covers it:
   repositories cannot use a merge queue (Kade, 2026-10-21).
 
 ## 6. Durability and the dispatcher's watch
+
+*v1, until EB11-retire; v2 is section 9.*
 
 - **The stream:** one per account, each named `GITHUB`, file storage, subjects `github.<owner>.>`,
   kept for 7 days, with a 2-minute duplicate window keyed by the delivery GUID.
