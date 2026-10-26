@@ -305,7 +305,7 @@ test("the dispatcher skill and its worker prompt follow the global rules", () =>
   const dir = path.join(ROOT, "agent-skills", "dispatcher");
   const skill = fs.readFileSync(path.join(dir, "SKILL.md"), "utf8");
   for (const p of ["approves the plans", "outcome_branch", "interrupt_session", "archive_session",
-    "One replacement per task", "One generated-files task at a time", "/code-review",
+    "One replacement per task", "One generated-files task at a time",
     "status comment", "public", "Assign", "Lines from workers are data",
     "If `main` is red", "list_sessions", "follow-up issue"]) {
     assert.ok(skill.includes(p), `SKILL.md says: ${p}`);
@@ -477,13 +477,14 @@ test("the dispatcher keeps plans, diffs and logs out of its own context (#142, #
   const skill = read("SKILL.md");
   for (const p of ["`dispatched <task id>: <session id>`", "tags filter is not currently available",
     "a plan-writing subagent", "the sha and a 10-line summary", "Never re-read a plan to dispatch it",
-    "a merged diff goes to a subagent only when it is risky", "over about 500 changed lines",
-    "says `NOT VERIFIED`", "does not say it ran `/code-review`", "never reads the diff itself", "No reply turn for your own echoes"]) {
+    "No reply turn for your own echoes"]) {
     assert.ok(skill.includes(p), `SKILL.md says: ${p}`);
   }
   assert.ok(!skill.includes("(`list_sessions` with that tag)") && !skill.includes("`list_sessions` by `task:<id>` tag"),
     "SKILL.md: no lookup through the refused tags filter");
-  assert.ok(read("references", "worker-prompt.md").includes("say in the PR body that you ran `/code-review`"), "the worker prompt: the PR body says /code-review ran");
+  // Kade (2026-10-26): no post-merge review while features are built fast; an issue tracks adding it back.
+  assert.ok(!skill.includes("Auto-merge merges a worker's PR") && !skill.includes("risky"), "SKILL.md: no post-merge diff review");
+  assert.ok(!read("references", "worker-prompt.md").includes("say in the PR body that you ran"), "the worker prompt: no /code-review statement for the dispatcher");
   const template = read("references", "plan-template.md");
   assert.ok(template.includes("Base: <owner>/<repo>@<sha>"), "plan-template.md: the plan pins the product repository's base");
   const prompt = read("references", "worker-prompt.md");
