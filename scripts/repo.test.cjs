@@ -486,7 +486,7 @@ test("the dispatcher keeps plans, diffs and logs out of its own context (#142, #
   const prompt = read("references", "worker-prompt.md");
   assert.ok(prompt.includes("since the plan's `Base:` commit"), "worker rule 5 checks main against the plan's Base");
   const watch = read("references", "pr-watch.md");
-  for (const p of ["only open PRs", "only the failing checks", "`tail_lines` of 50 or less",
+  for (const p of ["only open PRs", "only its failed or pending checks", "`tail_lines` of 50 or less",
     "read once"]) {
     assert.ok(watch.includes(p), `pr-watch.md says: ${p}`);
   }
