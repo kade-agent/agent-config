@@ -424,7 +424,7 @@ There is no keyless LAN user: `no_auth_user` is removed, and a local dispatcher 
 | Decision 22: the snapshot's head is the PR's; the mergeable read repairs it | agent-config #140, event-broker #26 | merged 2026-10-25 |
 | Decision 23: a comment's DONE/BLOCKED line in its event | event-broker #27 (merged 2026-10-25), agent-config (this PR) | open |
 | Decisions 24 to 28: the dispatcher's 13 signals, `pr_report`, one entry per line, the ignore file, open-only `--state`, quieter lines (event-broker #28) | agent-config (this PR), then event-broker, then `pr-watch.md` and the client pin | open |
-| Redeploy the receiver with the 13-signal `dispatcher` profile and `pr_report` | Kade | after the event-broker PR |
+| Redeploy the receiver with the 9-signal `dispatcher` profile (decision 30) | Kade | done 2026-10-26 (event-broker#31, cb47058) |
 
 **Settled:**
 - The two runtime dependencies `@nats-io/transport-node` and `@nats-io/jetstream` (3.4.0, pinned)
@@ -597,16 +597,16 @@ The elided fields are the v1 ones, null when they do not apply.
 durable consumer of `EVENTS` with that name: explicit acks, new messages only, a 60 s ack wait,
 `max_ack_pending` 1000, and one filter `ev.<owner>.*.*.*.<signal>` per signal.
 
-- `dispatcher` (13 signals, decision 24): `pr_merged`, `pr_closed`, `pr_ready`, `pr_draft`,
-  `automerge_off`, `merge_behind`, `merge_dirty`, `main_failed`, `main_passed`, `issue_closed`,
-  `issue_reopened`, `issue_labeled`, `pr_report`.
+- `dispatcher` (9 signals, decisions 24 and 30): `pr_merged`, `pr_closed`, `merge_behind`,
+  `merge_dirty`, `main_failed`, `main_passed`, `issue_closed`, `issue_labeled`, `pr_report`.
 - `all`: every signal (`ev.<owner>.>`), for debugging. Nothing reads it by default.
 
 The `dispatcher` profile leaves out `ci_passed`, `automerge_on`, `merge_clean`, `merge_blocked`,
 `merge_unstable`, `merge_draft`, `merge_other`, `main_still_passed`, `review_approved`, `review_dismissed`, the
 `*_other` signals and, since decision 24, `ci_failed`, `review_changes`, `review_comment`,
 `push_branch`, `pr_comment` and `issue_comment`: the worker's own PR subscription brings it CI,
-reviews and comments. A reader that needs one is a new row.
+reviews and comments. Decision 30 also drops `pr_ready`, `pr_draft`, `automerge_off` and
+`issue_reopened`. A reader that needs one is a new row.
 
 A new reader is a new row; a new situation is a new signal row; both are a receiver redeploy.
 
