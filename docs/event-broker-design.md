@@ -158,6 +158,25 @@ Dispatcher got this worker's status from event-broker", then "A" (no DONE at all
     18, 23 and 24: `pr_report` carries a BLOCKED line only. The receiver may keep matching DONE
     (a worker still on the old prompt); the dispatcher ignores such a line.
 
+**Added 2026-10-26 (Kade, "proceed your proposed changes, with dispatcher skills"):** the dispatcher
+still woke for events it does not act on; fewer wakes and fewer writes.
+
+30. **Quieter dispatcher (event-broker and the skill):**
+    - A strict line is `BLOCKED <task id>` only: `STRICT_LINE` drops `DONE`, so a stray DONE comment is
+      a `pr_comment`, which the dispatcher does not read (decision 29).
+    - The `dispatcher` profile drops `pr_ready`, `pr_draft`, `automerge_off` and `issue_reopened`
+      (13 signals to 9): each asked the dispatcher to look up who did it, and Kade does them on
+      purpose. `issue_labeled` stays, for Kade's change of a `status:blocked` label.
+    - The client's ignore file also takes `close <owner>/<repo>#<n>`, written after the dispatcher
+      closes a sub-issue, so its own close is not an `issue_closed` wake (decision 26 covered labels).
+    - Sub-issue labels: only `status:blocked`. `planned`, `approved` and `running` are read from the
+      plan's sha, the approval comment, the `dispatched` comment and the PR, so they cost no writes.
+    - Skill: no manual post-merge CI check (the `main_*` and `merge_*` signals carry it); the
+      `git merge-tree` check runs when dispatching, not on every wake; the Monitor's re-arm is the
+      check-in (a `send_later` only while no Monitor is armed); one nudge, then the replacement.
+    - Order: event-broker first; then an agent-config PR moves the pin (`pr-watch.md`) and its signal
+      table, ignore-file text and section 9 Profiles to 9 signals.
+
 Decision 6 changes with decision 11: LAN access needs a key now (section 7). Decision 7 stays, with
 one dispatcher per org.
 
