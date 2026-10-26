@@ -50,7 +50,7 @@ One commit each, pushed after each:
 
 - <The repository's gate commands, from its Gates table; which ones CI covers if they cannot run here.>
 
-## DONE line
+## Follow-ups
 
-`DONE <task id> <owner>/<repo>#<PR>: <what changed, key numbers, placeholders, NOT VERIFIED, follow-ups>`
+- <What the PR body's "Follow-ups" section must list: ADR departures, placeholders taken, NOT VERIFIED, open questions. A merge is the DONE (decision 29): no DONE line.>
 ```
