@@ -372,15 +372,16 @@ test("the dispatcher skill says how it watches PR events and tells the worker at
   // v1 (watch.sh, natscli) is named once, in the v1 note, until EB11-retire.
   assert.equal(watch.split("watch.sh").length - 1, 1, "pr-watch.md names watch.sh only in the v1 note");
   assert.equal(watch.split("install-nats").length - 1, 1, "pr-watch.md names install-nats only in the v1 note");
-  // The action table has a row for each of the 13 signals of the dispatcher profile (event-broker src/profiles.js,
-  // decision 24), and none for the six the worker's own PR subscription now brings it.
+  // The action table has a row for each of the 9 signals of the dispatcher profile (event-broker src/profiles.js,
+  // decisions 24 and 30), and none for the six the worker's own PR subscription brings it or the four decision 30 dropped.
   const table = fs.readFileSync(path.join(dir, "references", "pr-watch.md"), "utf8");
-  for (const sig of ["pr_merged", "pr_closed", "pr_ready", "pr_draft", "automerge_off", "merge_behind", "merge_dirty",
-    "main_failed", "main_passed", "issue_closed", "issue_reopened", "issue_labeled", "pr_report"]) {
+  for (const sig of ["pr_merged", "pr_closed", "merge_behind", "merge_dirty",
+    "main_failed", "main_passed", "issue_closed", "issue_labeled", "pr_report"]) {
     assert.match(table, new RegExp(`^\\| [^|]*\`${sig}\``, "m"), `pr-watch.md: action table row for ${sig}`);
   }
-  for (const sig of ["ci_failed", "review_changes", "review_comment", "pr_comment", "issue_comment", "push_branch"]) {
-    assert.doesNotMatch(table, new RegExp(`^\\| \`${sig}\``, "m"), `pr-watch.md: no action table row for ${sig}`);
+  for (const sig of ["ci_failed", "review_changes", "review_comment", "pr_comment", "issue_comment", "push_branch",
+    "pr_ready", "pr_draft", "automerge_off", "issue_reopened"]) {
+    assert.doesNotMatch(table, new RegExp(`^\\| [^|]*\`${sig}\``, "m"), `pr-watch.md: no action table row for ${sig}`);
   }
   for (const gone of ["Last-Event-ID", "EVENT_BROKER_TOKEN_FILE", "broker.last-id", ".bashrc", "releases/latest",
     "consumer next GITHUB dispatcher --raw"]) {
@@ -393,8 +394,8 @@ test("the dispatcher skill says how it watches PR events and tells the worker at
   assert.ok(watch.includes("reader-<owner>"), "pr-watch.md names the org's reader-<owner> key");
   assert.ok(!watch.includes("replacing `CLOUD_NKEY`"), "pr-watch.md: cloud seed is revoked via READER_NKEY_<OWNER>");
   assert.ok(watch.includes("READER_NKEY_<OWNER>"), "pr-watch.md names READER_NKEY_<OWNER>");
-  assert.ok(watch.includes("One dispatcher per org") && watch.includes("the 13 signals"),
-    "pr-watch.md: one dispatcher per org, and the profile's 13 signals");
+  assert.ok(watch.includes("One dispatcher per org") && watch.includes("the 9 signals"),
+    "pr-watch.md: one dispatcher per org, and the profile's 9 signals");
   // EB10-docs: the docs say what the 2026-10-25 live checks showed.
   assert.ok(!watch.includes('"event": "check_run"'), "pr-watch.md: the example event is one the filtered consumer delivers");
   assert.ok(watch.includes("WATCH_PIDFILE") && watch.includes("watch-<org>.pid"), "pr-watch.md: one pidfile per org");
@@ -516,21 +517,22 @@ test("the dispatcher keeps plans, diffs and logs out of its own context (#142, #
 
 // Decisions 24 to 28 (event-broker #28, #30): workers learn CI, reviews and merges from their own PR
 // subscription; the dispatcher forwards only conflicts, finds a stalled worker with get_session,
-// writes the ignore file after its labels, and runs the client pinned at event-broker 4d17b18.
-test("pr-watch.md and SKILL.md follow the 13-signal dispatcher profile (decisions 24 to 28)", () => {
+// writes the ignore file after its labels and closes (decision 30), and runs the client pinned at event-broker cb47058.
+test("pr-watch.md and SKILL.md follow the 9-signal dispatcher profile (decisions 24 to 30)", () => {
   const dir = path.join(ROOT, "agent-skills", "dispatcher");
   const read = (...p) => fs.readFileSync(path.join(dir, ...p), "utf8").replace(/\s+/g, " ");
   const watch = read("references", "pr-watch.md");
   const pins = watch.match(/checkout --detach [0-9a-f]{40}/g) || [];
-  assert.ok(pins.length >= 2 && pins.every((p) => p.endsWith("4d17b187fd3227fe66efeb65cc72154b9e5f4ef3")),
-    "pr-watch.md: both install lines pin event-broker 4d17b18");
-  for (const p of ["ignore-<org>", "label <owner>/<repo>#<n> <label>", "SUMMARY <n> events <k> entries", "--alive",
+  assert.ok(pins.length >= 2 && pins.every((p) => p.endsWith("cb4705813614141a446295fa0da04f5882efb37b")),
+    "pr-watch.md: both install lines pin event-broker cb47058");
+  for (const p of ["ignore-<org>", "label <owner>/<repo>#<n> <label>", "close <owner>/<repo>#<n>", "SUMMARY <n> events <k> entries", "--alive",
     "`--all`", "a subscription does not deliver a conflict"]) {
     assert.ok(watch.includes(p), `pr-watch.md says: ${p}`);
   }
   assert.ok(!watch.includes("state=open )"), "pr-watch.md: --state filters itself, no grep");
   assert.ok(!watch.includes("does not wake a worker"), "pr-watch.md: a red run does wake a subscribed worker");
   const skill = read("SKILL.md");
+  assert.ok(skill.includes("after each label you set or sub-issue you close"), "SKILL.md: the ignore file covers closes");
   assert.ok(!skill.includes("No push for 2 hours"), "SKILL.md: a stalled worker is found by get_session, not pushes");
   const prompt = read("references", "worker-prompt.md");
   assert.ok(!prompt.includes("going 2 hours without a push"), "worker rule 6: no push clock");
