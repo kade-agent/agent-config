@@ -477,7 +477,7 @@ test("the dispatcher keeps plans, diffs and logs out of its own context (#142, #
   const skill = read("SKILL.md");
   for (const p of ["`dispatched <task id>: <session id>`", "tags filter is not currently available",
     "a plan-writing subagent", "the sha and a 10-line summary", "Never re-read a plan to dispatch it",
-    "a merged diff goes to a subagent only when it is risky", "over about 300 changed lines",
+    "a merged diff goes to a subagent only when it is risky", "over about 500 changed lines",
     "says `NOT VERIFIED`", "does not say it ran `/code-review`", "never reads the diff itself", "No reply turn for your own echoes"]) {
     assert.ok(skill.includes(p), `SKILL.md says: ${p}`);
   }
