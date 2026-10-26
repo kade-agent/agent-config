@@ -2,7 +2,7 @@
 
 A task's plan is `plans/<lane>/<task>.md` in `<owner>/tasks`. Copy this file, fill every
 `<slot>`, and commit it. Kade approves the plan at that commit's full sha; the worker reads it at
-that sha. An edit after approval sends the task back to `status:planned`. `Base:` is the task
+that sha. An edit after approval sends the task back to Kade. `Base:` is the task
 repository's `main` when the plan was written: the dispatcher and the worker check that `main` has
 not moved on in the plan's files since then.
 
