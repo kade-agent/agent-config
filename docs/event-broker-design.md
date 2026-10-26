@@ -147,6 +147,17 @@ and a subscription does not deliver merge conflicts, so `merge_dirty` and `merge
     alive, and the dispatcher re-arms every 25 minutes); `delivery` printed as its first 8
     characters, the full id staying in `--json`.
 
+**Added 2026-10-26 (Kade):** "worker session's DONE message into dispatcher is not required ...
+Dispatcher got this worker's status from event-broker", then "A" (no DONE at all; BLOCKED stays).
+
+29. **A merge is the DONE:** a worker no longer posts or sends `DONE <task id> …`. The dispatcher
+    finishes a task on `pr_merged` (a draft for Kade: its green CI), and reads the follow-ups,
+    placeholders and NOT VERIFIED lines from the PR body's "Follow-ups" section, with gh. `BLOCKED
+    <task id>: …` stays, because no signal says a worker is stuck: a PR comment, or `send_message`
+    when there is no PR yet. A worker sends no message once its PR exists. This amends decisions
+    18, 23 and 24: `pr_report` carries a BLOCKED line only. The receiver may keep matching DONE
+    (a worker still on the old prompt); the dispatcher ignores such a line.
+
 Decision 6 changes with decision 11: LAN access needs a key now (section 7). Decision 7 stays, with
 one dispatcher per org.
 

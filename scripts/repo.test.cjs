@@ -280,7 +280,7 @@ test("candidate.yml runs on main only, asks for something to release, and has no
 
 // The dispatcher skill (Kade, 2026-10-21) runs a queue through sub sessions. A worker left waiting is
 // the failure it exists to prevent, so its worker prompt must keep the rules that stop it: subscribe
-// to the PR, push after every commit, check mergeability itself, and report DONE or BLOCKED.
+// to the PR, push after every commit, check mergeability itself, and report BLOCKED (a merge is the DONE, decision 29).
 test("the dispatcher skill names its worker prompt, and the prompt keeps the rules against stuck workers", () => {
   const dir = path.join(ROOT, "agent-skills", "dispatcher");
   const skill = fs.readFileSync(path.join(dir, "SKILL.md"), "utf8");
@@ -289,9 +289,10 @@ test("the dispatcher skill names its worker prompt, and the prompt keeps the rul
     assert.ok(skill.includes(p), `SKILL.md names ${p}`);
   }
   const prompt = fs.readFileSync(path.join(dir, "references", "worker-prompt.md"), "utf8");
-  for (const p of ["subscribe_pr_activity", "PUSH after every commit", "mergeable state yourself", "DONE <task id>", "BLOCKED <task id>", "Never one big commit"]) {
+  for (const p of ["subscribe_pr_activity", "PUSH after every commit", "mergeable state yourself", "BLOCKED <task id>", "Never one big commit"]) {
     assert.ok(prompt.includes(p), `the worker prompt keeps: ${p}`);
   }
+  assert.ok(!prompt.includes("DONE <task id>"), "the worker prompt no longer asks for a DONE line (decision 29)");
 });
 
 // The review of 2026-10-21 against the global rules: the dispatcher gets Kade's approval of the
@@ -406,16 +407,16 @@ test("the dispatcher runs lanes of sub-issues in <owner>/tasks with plans as fil
   assert.ok(!skill.includes("edited after each event"), "the status comment is gone: state is rebuilt from the issues");
   const prompt = fs.readFileSync(path.join(dir, "references", "worker-prompt.md"), "utf8").replace(/\s+/g, " ");
   for (const p of ["plan at the pinned sha", "`main` moved on in your files", "Your pushes are your progress",
-    "`Closes <owner>/tasks#<n>`", "posts the line on the sub-issue"]) {
+    "`Closes <owner>/tasks#<n>`", "posts the line on the sub-issue", "a merge is your DONE", "## Follow-ups"]) {
     assert.ok(prompt.includes(p), `the worker prompt says: ${p}`);
   }
   const template = path.join(dir, "references", "plan-template.md");
   assert.ok(fs.existsSync(template), "references/plan-template.md exists");
   const plan = fs.readFileSync(template, "utf8");
-  for (const h of ["## Goal", "## Values", "## Steps", "## Files", "## Tests first", "## Placeholders", "## Gate",
-    "## DONE line"]) {
+  for (const h of ["## Goal", "## Values", "## Steps", "## Files", "## Tests first", "## Placeholders", "## Gate"]) {
     assert.ok(plan.includes(h), `the plan template has the worker-prompt slot ${h}`);
   }
+  assert.ok(!plan.includes("## DONE line"), "the plan template has no DONE line (decision 29)");
   const watch = fs.readFileSync(path.join(dir, "references", "pr-watch.md"), "utf8").replace(/\s+/g, " ");
   for (const p of ["`issue_comment`", "`issue_closed`", "`timed_out`", "`action_required`", "sweep the lanes' sub-issues", "gh issue view <n> -R <owner>/tasks --comments"]) {
     assert.ok(watch.includes(p), `pr-watch.md says: ${p}`);
@@ -437,29 +438,29 @@ test("the dispatcher keeps its work items only in <owner>/tasks and relays the w
     "the dispatcher closes the sub-issue once it has confirmed the merge or the green draft",
     "`gh issue transfer`", "needs GraphQL", "`gh label clone`", "re-check the sub-issue links",
     "old → new numbers",
-    "posts DONE and BLOCKED on the sub-issue", "idle with no DONE", "its own PR subscription",
-    "messages are the fallback", "as a comment on its own PR", "counts once, by its task id"]) {
+    "posts BLOCKED on the sub-issue", "idle with an open PR and no merge", "its own PR subscription",
+    "A merge is the DONE", "a strict `BLOCKED <task id>: …` line", "as a comment on its own PR"]) {
     assert.ok(skill.includes(p), `SKILL.md says: ${p}`);
   }
   const prompt = fs.readFileSync(path.join(dir, "references", "worker-prompt.md"), "utf8").replace(/\s+/g, " ");
   for (const p of ["`Closes <owner>/tasks#<n>`, never a bare `#<n>`",
-    "post a comment on your PR that starts with the line `DONE <task id>",
+    "a merge is your DONE",
     "Only when you have no PR yet, or the comment cannot be posted, send the same line with send_message",
     "send no lease or progress messages",
-    "cloud workers could not write to `<owner>/tasks` (2026-10-25)", "relays the worker's DONE and BLOCKED lines"]) {
+    "cloud workers could not write to `<owner>/tasks` (2026-10-25)", "relays the worker's BLOCKED lines"]) {
     assert.ok(prompt.includes(p), `the worker prompt says: ${p}`);
   }
   assert.ok(!skill.includes("LEASE") && !prompt.includes("LEASE"), "no LEASE lines: pushes are the progress");
   const watch = fs.readFileSync(path.join(dir, "references", "pr-watch.md"), "utf8").replace(/\s+/g, " ");
-  assert.ok(watch.includes("Sweep the open task PRs' comments") && watch.includes("starting with a strict DONE or BLOCKED line"),
-    "pr-watch.md: the sweep reads task PR comments; pr_report carries DONE/BLOCKED");
+  assert.ok(watch.includes("Sweep the open task PRs' comments") && watch.includes("starting with a strict BLOCKED line"),
+    "pr-watch.md: the sweep reads task PR comments; pr_report carries BLOCKED");
   // Decision 20 (S2): main events carry red=; the hold lifts on a main_passed with red=-.
   assert.ok(watch.includes("With `red=-`, `main` is green") && watch.includes("`red`") && !watch.includes("(or the receiver restarted)"),
     "pr-watch.md: main_passed lifts the hold on red=-, and the entry fields name red");
   // Decision 21 (S3): the re-arm sweep reads the PR snapshots first, gh only for what they lack.
   assert.ok(watch.includes("--state <owner>/<repo>") && watch.includes("gh only for what it lacks"),
     "pr-watch.md: the re-arm sweep starts from watch.js --state");
-  // Decision 23: a strict DONE/BLOCKED line rides in the comment event as line=.
+  // Decisions 23 and 29: a strict BLOCKED line rides in the comment event as line=.
   assert.ok(watch.includes("`line=`") && watch.includes("no gh read"),
     "pr-watch.md: pr_comment acts on line= without a gh read");
   assert.ok(!prompt.includes("Post the same line as a sub-issue comment"), "the worker does not post DONE itself");
