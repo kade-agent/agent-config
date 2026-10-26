@@ -325,8 +325,22 @@ test("the dispatcher skill and its worker prompt follow the global rules", () =>
 test("the dispatcher predicts conflicts between open branches and records Kade's approval", () => {
   const skill = fs.readFileSync(path.join(ROOT, "agent-skills", "dispatcher", "SKILL.md"), "utf8");
   for (const p of ["git merge-tree --write-tree", "git diff --name-only", "stop editing",
-    "approval on the queue issue"]) {
+    "approval on the queue issue", "when you dispatch a task"]) {
     assert.ok(skill.includes(p), `SKILL.md says: ${p}`);
+  }
+});
+
+// Kade (2026-10-26, decision 30): fewer wakes and writes. The broker's merge_* and main_* signals carry
+// what a manual check after each merge used to read, so the wake routine does not repeat it; one timer
+// (the Monitor's re-arm) is the check-in; a worker that does not move after one nudge is replaced.
+test("the dispatcher's wake routine does not repeat what the broker signals carry (decision 30)", () => {
+  const skill = fs.readFileSync(path.join(ROOT, "agent-skills", "dispatcher", "SKILL.md"), "utf8").replace(/\s+/g, " ");
+  for (const p of ["One nudge without progress", "The Monitor's re-arm is the check-in", "`main_failed`", "`main_passed`"]) {
+    assert.ok(skill.includes(p), `SKILL.md says: ${p}`);
+  }
+  for (const gone of ["After any merge, check CI on `main` and every other open PR", "Two nudges without progress",
+    "check the claims on every wake", "about 40 minutes ahead"]) {
+    assert.ok(!skill.includes(gone), `SKILL.md no longer says: ${gone}`);
   }
 });
 
@@ -399,12 +413,16 @@ test("the dispatcher runs lanes of sub-issues in <owner>/tasks with plans as fil
   const skill = fs.readFileSync(path.join(dir, "SKILL.md"), "utf8").replace(/\s+/g, " ");
   for (const p of ["`<owner>/tasks`", "sub-issue", "global session cap", "never falls back to a public repository",
     "`plans/<lane>/<task>.md`", "pinned sha", "`Blocked by: #<n>`", "`<!-- task:<id> -->`", "plan shas",
-    "`status:planned`", "`status:approved`", "`status:running`", "`status:blocked`", "goes back to `status:planned`",
+    "`status:blocked`", "A plan edited after approval goes back to Kade",
     "`Closes <owner>/tasks#<n>`", "rebuilt from the issues", "lease", "delivery GUID", "labelled `follow-up`",
     "workers' account", "references/plan-template.md"]) {
     assert.ok(skill.includes(p), `SKILL.md says: ${p}`);
   }
   assert.ok(!skill.includes("edited after each event"), "the status comment is gone: state is rebuilt from the issues");
+  // Decision 30: only status:blocked is a label; the other states are read, not written.
+  for (const gone of ["`status:planned`", "`status:approved`", "`status:running`"]) {
+    assert.ok(!skill.includes(gone), `SKILL.md no longer writes ${gone}`);
+  }
   const prompt = fs.readFileSync(path.join(dir, "references", "worker-prompt.md"), "utf8").replace(/\s+/g, " ");
   for (const p of ["plan at the pinned sha", "`main` moved on in your files", "Your pushes are your progress",
     "`Closes <owner>/tasks#<n>`", "posts the line on the sub-issue", "a merge is your DONE", "## Follow-ups"]) {
