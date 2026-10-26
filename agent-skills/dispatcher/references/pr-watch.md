@@ -113,8 +113,12 @@ watch gets those events.
   head sha, mergeable state, the checks on the head, the last review and the last comment's author:
 
   ```bash
-  node "$HOME/.claude/dispatcher/event-broker/client/watch.js" --owner <org> --state <owner>/<repo>
+  node "$HOME/.claude/dispatcher/event-broker/client/watch.js" --owner <org> --state <owner>/<repo> | grep -E '^(STATE |pr [^ ]+ state=open )'
   ```
+
+  The snapshot holds every PR the receiver has seen, merged history included (~15k tokens per
+  repository in #143), so the `grep` keeps the `STATE` line and only open PRs. In each PR's
+  `checks=`, act on only the failing checks.
 
   Then run gh only for what it lacks: a PR it does not list, comment text (DONE and BLOCKED lines),
   or a value that disagrees with what you saw. Before acting on a merge, confirm it with gh.
@@ -193,7 +197,7 @@ away, before anything else in the wake routine:
 | `pr_ready` or `pr_draft`, on a PR whose merge path is Kade's | Nothing to the worker. The line does not say who did it: check with gh, and if it was not the worker or you, tell Kade at once. |
 | `automerge_off` | Nothing to the worker. Check with gh who turned it off; if it was someone else, tell Kade that the task's merge path changed. |
 | `main_failed` | Nothing to the worker. `main` is red, and `red=` lists every workflow failing there: follow SKILL.md, 5. Watching, step 5. |
-| `push_branch` on a task's branch | Nothing to the worker. It is that task's progress: note the time, which restarts its 2 hours (SKILL.md, 5. Watching). On any other branch, nothing. |
+| `push_branch` on a task's branch | Nothing to the worker, and no reply turn. It is that task's progress: note the time, which restarts its 2 hours (SKILL.md, 5. Watching). On any other branch, nothing. |
 | `main_passed` | Nothing to the worker. That workflow on `main` is green again. With `red=-`, `main` is green: lift the hold from `main_failed` and dispatch what waited. Otherwise `red=` names the workflows still holding it: say nothing. |
 
 These are the 18 signals of the `dispatcher` profile. No other signal arrives, so a `ci_passed`, a
@@ -202,6 +206,11 @@ These are the 18 signals of the `dispatcher` profile. No other signal arrives, s
 
 **Repeats.** The `delivery` field is the dedupe key. A line whose `delivery` you already handled is
 skipped, whether it came again after an unacked pull, a restart of the client or a re-arm.
+
+**Logs and long comments (#143).** A failed job's log is read with a `tail_lines` of 50 or less, or
+grepped for `error:` and `FAILED`; a full log or a count over many runs goes only to a subagent
+(`Agent`) that returns a table. A DONE or BLOCKED comment with tables is read once; later wakes act
+on the entry's `line=` and do not read it again.
 
 Then update the status table (SKILL.md, 5. Watching). A merge also runs the after-merge checks
 there. Conflicts between two open PRs are not in these events: the `git merge-tree` check
