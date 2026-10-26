@@ -74,7 +74,8 @@ to 30s of interval as a summary window length"; batch everything, nothing bypass
 main, but I think it should be a fallback of event-broker. Event broker would send all info to
 dispatcher"; then "A for both" (leases through the broker; a BLOCKED before any PR by message).
 
-18. **Workers report through GitHub, and the broker carries it:** a worker posts its strict DONE
+18. **Workers report through GitHub, and the broker carries it:** (Changed 2026-10-26: the dispatcher
+    reads `pr_report`, and no longer `push_branch`, see decision 24.) A worker posts its strict DONE
     or BLOCKED line as a comment on its own PR (`pr_comment` reaches the dispatcher), and its
     pushes are its progress: the receiver publishes `push_branch` for a push to a task branch
     (`claude/*`, `agent/*`), which the `dispatcher` profile reads in place of `LEASE` messages.
@@ -116,6 +117,35 @@ below; S2 (the `red` list on `main_*` events) and S3 (a PR snapshot the client r
     `BLOCKED <task id>`, else null. No other comment text enters the stream. The client prints
     `line=`, and the dispatcher acts on a strict line from the workers' account without a gh
     read (section 4; `pr-watch.md`).
+
+**Added 2026-10-26 (Kade, event-broker #28):** "ci_failed - pass this to sub session; pr_comment -
+DONE, BLOCKED is required for dispatcher. keep and send to dispatcher; push_branch - useless to
+both"; then, on where the dropping happens, "receiver's". A worker's own `subscribe_pr_activity`
+already wakes it for a failed check (with the job's name and id), a review and its PR's merge or
+close: seen in five worker transcripts on 2026-10-26, where the dispatcher had also forwarded one
+of those red runs. The broker cannot message a worker itself (`send_message` is a session's tool),
+and a subscription does not deliver merge conflicts, so `merge_dirty` and `merge_behind` stay.
+
+24. **The dispatcher reads only what it acts on:** a comment whose `line` is set (decision 23) is
+    `pr_report` on a PR, and `pr_comment` stays the signal of every other PR comment. The
+    `dispatcher` profile drops `ci_failed`, `review_changes`, `review_comment`, `push_branch`,
+    `pr_comment` and `issue_comment`, and gains `pr_report` (section 9, Profiles). Workers learn
+    CI, reviews and merges from their own PR subscription; the dispatcher still forwards a merge
+    conflict. A stalled worker is found by the dispatcher's check-in (`get_session`), not by a
+    missing push, so decision 18's `push_branch` is no longer the dispatcher's progress signal.
+    Sub-issue comments come from the dispatcher itself (workers cannot write `<owner>/tasks`) or
+    from Kade, so `issue_comment` leaves the profile; the re-arm sweep still reads the sub-issues.
+25. **One entry per line:** a summary is a header line, `SUMMARY <n> events <k> entries`, then each
+    entry on its own line, most urgent first. A Monitor cut a single long line ("…(truncated)")
+    and hid a DONE line; separate lines cannot hide one (section 9, The client).
+26. **The dispatcher's own writes are not echoed back:** after each label it sets, the dispatcher
+    appends a key line to the client's ignore file; the client drops a matching event, acks it
+    and counts it in the header as `ignored=<k>` (section 9, The client).
+27. **`--state` shows open PRs only:** with only their failing or pending checks; `--all` gives
+    every snapshot, as before. This replaces the skill's `grep` (agent-config #144).
+28. **Quieter lines:** no `WATCH-ALIVE` unless `--alive` (a Monitor already knows the process is
+    alive, and the dispatcher re-arms every 25 minutes); `delivery` printed as its first 8
+    characters, the full id staying in `--json`.
 
 Decision 6 changes with decision 11: LAN access needs a key now (section 7). Decision 7 stays, with
 one dispatcher per org.
@@ -363,6 +393,8 @@ There is no keyless LAN user: `no_auth_user` is removed, and a local dispatcher 
 | Redeploy with the reader's `STATE` permissions (S3) | Kade | next |
 | Decision 22: the snapshot's head is the PR's; the mergeable read repairs it | agent-config #140, event-broker #26 | merged 2026-10-25 |
 | Decision 23: a comment's DONE/BLOCKED line in its event | event-broker #27 (merged 2026-10-25), agent-config (this PR) | open |
+| Decisions 24 to 28: the dispatcher's 13 signals, `pr_report`, one entry per line, the ignore file, open-only `--state`, quieter lines (event-broker #28) | agent-config (this PR), then event-broker, then `pr-watch.md` and the client pin | open |
+| Redeploy the receiver with the 13-signal `dispatcher` profile and `pr_report` | Kade | after the event-broker PR |
 
 **Settled:**
 - The two runtime dependencies `@nats-io/transport-node` and `@nats-io/jetstream` (3.4.0, pinned)
@@ -425,11 +457,11 @@ anything else (`cancelled`, `skipped`, `neutral`, `stale`, null).
 | `check_run`, `check_suite` | any branch | `check_failed` / `check_passed` / `check_other` |
 | `pull_request_review` | state `changes_requested`, `commented`, `approved`, `dismissed`; else | `review_changes`, `review_comment`, `review_approved`, `review_dismissed`; `review_other` |
 | `issues` | `closed`, `reopened`, `labeled` | `issue_closed`, `issue_reopened`, `issue_labeled` |
-| `issue_comment` | on a PR / on an issue | `pr_comment` / `issue_comment` |
+| `issue_comment` | on a PR with a strict DONE/BLOCKED `line` (decision 24) / on a PR / on an issue | `pr_report` / `pr_comment` / `issue_comment` |
 | `push` | to main | `push_main` |
 | `push` | to a task branch (`claude/*`, `agent/*`), not a deletion (decision 18) | `push_branch` |
 
-That is 38 signals. `check_run` and `check_suite` get their own signals so one red run is not three
+That is 39 signals. `check_run` and `check_suite` get their own signals so one red run is not three
 `ci_failed`.
 
 **Task branch pushes (decision 18).** `push_branch` is published to `EVENTS` only; v1 (`GITHUB`)
@@ -479,7 +511,7 @@ store. The receiver is its only writer and reader in S1.
 "last_comment": {"author", "url"}, "updated_at"}`. Each event sets what it knows: a `pull_request`
 event its fields and `state` (`pr_merged` merged, `pr_closed` closed, a reopen or anything else
 open), `mergeable` the state, a check or run `checks[<name>]`, a review `review` (lower case), a
-`pr_comment` `last_comment`. A new `sha` empties `checks`, so they are always the head's. Unknown
+`pr_comment` or `pr_report` (decision 24) `last_comment`. A new `sha` empties `checks`, so they are always the head's. Unknown
 fields are null. Updates run one PR at a time; a failed write is logged, as for every key.
 
 **Whose head (decision 22):** `sha` moves only on a `pull_request`, `mergeable` or review event,
@@ -535,15 +567,16 @@ The elided fields are the v1 ones, null when they do not apply.
 durable consumer of `EVENTS` with that name: explicit acks, new messages only, a 60 s ack wait,
 `max_ack_pending` 1000, and one filter `ev.<owner>.*.*.*.<signal>` per signal.
 
-- `dispatcher` (18 signals): `pr_merged`, `pr_closed`, `pr_ready`, `pr_draft`, `automerge_off`,
-  `merge_behind`, `merge_dirty`, `ci_failed`, `main_failed`, `main_passed`, `review_changes`,
-  `review_comment`, `issue_closed`, `issue_reopened`, `issue_labeled`, `pr_comment`,
-  `issue_comment`, `push_branch`.
+- `dispatcher` (13 signals, decision 24): `pr_merged`, `pr_closed`, `pr_ready`, `pr_draft`,
+  `automerge_off`, `merge_behind`, `merge_dirty`, `main_failed`, `main_passed`, `issue_closed`,
+  `issue_reopened`, `issue_labeled`, `pr_report`.
 - `all`: every signal (`ev.<owner>.>`), for debugging. Nothing reads it by default.
 
 The `dispatcher` profile leaves out `ci_passed`, `automerge_on`, `merge_clean`, `merge_blocked`,
-`merge_unstable`, `merge_draft`, `merge_other`, `main_still_passed`, `review_approved`, `review_dismissed` and the
-`*_other` signals. A reader that needs one is a new row.
+`merge_unstable`, `merge_draft`, `merge_other`, `main_still_passed`, `review_approved`, `review_dismissed`, the
+`*_other` signals and, since decision 24, `ci_failed`, `review_changes`, `review_comment`,
+`push_branch`, `pr_comment` and `issue_comment`: the worker's own PR subscription brings it CI,
+reviews and comments. A reader that needs one is a new row.
 
 A new reader is a new row; a new situation is a new signal row; both are a receiver redeploy.
 
@@ -552,32 +585,40 @@ A new reader is a new row; a new situation is a new signal row; both are a recei
 `client/watch.js` in event-broker replaces `watch.sh` and natscli. It needs Node 22+ and runs from a
 clone of event-broker at a pinned commit, after `npm ci --omit=dev`.
 
-- **Command:** `node client/watch.js --owner <org> [--profile dispatcher] [--json] [--window <s>]`.
+- **Command:** `node client/watch.js --owner <org> [--profile dispatcher] [--json] [--window <s>]
+  [--alive]`.
 - **Settings:** the environment first, then `~/.claude/dispatcher/broker.env` (`KEY=value` lines):
   - `EVENT_BROKER_URL`: `nats://` on the LAN, `wss://` from the cloud;
   - `EVENT_BROKER_OWNER`: `--owner` wins;
   - `EVENT_BROKER_NKEY_FILE`: default `~/.claude/dispatcher/<owner>.nk`;
   - `EVENT_BROKER_CLOUD_SEED`: written to the key file at mode 600 when the file is missing;
-  - `WATCH_PIDFILE`: default `~/.claude/dispatcher/watch-<owner>.pid`.
+  - `WATCH_PIDFILE`: default `~/.claude/dispatcher/watch-<owner>.pid`;
+  - `WATCH_IGNOREFILE` (decision 26): default `~/.claude/dispatcher/ignore-<owner>`.
 - **First line:** `WATCH-ARMED <owner> consumer=<profile> unprocessed=<n>`, printed after the
   stream's subjects proved to be `ev.<owner>.>`. A key for another org's account prints
   `BROKER-DOWN key is for another account`.
 - **Command (decision 17):** `--window <s>`, default 30. `--window 0` prints one line per event.
 - **`--state <owner>/<repo>` (decision 21):** reads `STATE` with the reader key and exits 0: first
-  `STATE <owner>/<repo> red=<names, or ->`, then one line per PR snapshot, by number:
+  `STATE <owner>/<repo> red=<names, or ->`, then one line per open PR snapshot (decision 27; every
+  snapshot with `--all`), by number, with only the checks that failed or are pending (every
+  check with `--all`):
   `pr <owner>/<repo>#<n> state=<state> branch=… sha=<7> mergeable=… checks=<name>:<conclusion>,…
   review=… draft=… auto_merge=… last_comment=<author> updated_at=…` (null fields left out, values
-  quoted as in an entry). `--json` prints one object `{"repo", "red", "prs": [<snapshot>, …]}`.
+  quoted as in an entry). `--json` prints one object `{"repo", "red", "prs": [<snapshot>, …]}`,
+  filtered the same way.
   An owner other than `--owner` is exit 2; `BROKER-DOWN <why>` and exit 1 when it cannot read.
 - **The event entry:** `<signal> <repo>#<n>` (or `<repo>@<branch>` for branch scope), then
   `key=value` fields when not null, in this order: `branch`, `sha` (7 characters), `check`, `url`,
   `conclusion` (on `*_other` only), `red` (on `main_*`: the names joined by `,`, `-` when none;
-  decision 20), `label`, `state_reason`, `author`, `line` (decision 23), `delivery`. A value holding a
-  space, `"` or `=` is printed as a JSON string.
+  decision 20), `label`, `state_reason`, `author`, `line` (decision 23), `delivery` (its first 8
+  characters, decision 28). A value holding a space, `"` or `=` is printed as a JSON string.
 - **The summary (decision 17):** the first event of a window starts it; when it is 30 s old (the
-  5 s tick, so 30 to 35 s) its events are one line, `SUMMARY <n> events | <entry> | <entry> …`.
+  5 s tick, so 30 to 35 s) its events are printed as a header, `SUMMARY <n> events <k> entries`
+  (with ` ignored=<i>` when decision 26 dropped any), then one entry per line (decision 25).
   Events with the same signal, target and check are one entry, the latest, with `count=<k>` when
-  k > 1; entries keep the order of their first event. The backlog counted in `WATCH-ARMED`
+  k > 1. Entries are ordered by urgency: `pr_merged`, `pr_closed`, `pr_report`, `main_failed`,
+  `merge_dirty`, `merge_behind`, `main_passed`, then the rest; within one rank, by their first
+  event. The whole summary is one write, acked after it. The backlog counted in `WATCH-ARMED`
   (`unprocessed=<n>`) is one summary as soon as its n messages are read. With `--window 0` each
   event is its entry alone, as before. `--json` prints `{"summary": true, "count": <n>, "events":
   [<v2 object>, …]}`, every event, ungrouped (with `--window 0`, the v2 object).
@@ -587,8 +628,13 @@ clone of event-broker at a pinned commit, after `npm ci --omit=dev`.
   next watch gets those messages. A message seen again (same
   stream sequence, in one process) is acked and not printed again. Across a restart delivery is
   at-least-once: a line written before a kill, with no ack, is printed again.
-- **Heartbeat:** `WATCH-ALIVE <owner> consumer=<profile> unprocessed=<n>` after 600 s with no line
-  printed.
+- **Ignore file (decision 26):** after each label it sets, the dispatcher appends
+  `<ISO time> label <owner>/<repo>#<n> <label>` to `WATCH_IGNOREFILE`. Before each summary, the client
+  reads the file's lines from the last hour; an `issue_labeled` event matching one is acked, not
+  printed, and counted in the header. The file holds no comment text and stays outside any
+  repository; it is per org, beside the pidfile. A missing or unreadable file drops nothing.
+- **Heartbeat:** with `--alive` only (decision 28): `WATCH-ALIVE <owner> consumer=<profile>
+  unprocessed=<n>` after 600 s with no line printed.
 - **Failure:** `BROKER-DOWN <why>` and exit 1 after two failed connects 5 s apart, a disconnect
   over 120 s, or two failed consumer reads in a row. Settings errors also print `BROKER-DOWN`, with
   exit 2. The seed is never printed.
