@@ -462,3 +462,29 @@ test("the dispatcher keeps its work items only in <owner>/tasks and relays the w
   assert.ok(!prompt.includes("Post the same line as a sub-issue comment"), "the worker does not post DONE itself");
   assert.ok(!prompt.includes("NOT VERIFIED: a cloud worker reading"), "the cloud-workers note records what was seen");
 });
+
+// kade-agent/agent-config#142 and #143: two cloud dispatchers grew ~10k and ~2.8k tokens a minute.
+// Plan text, code reads, merged diffs and logs stay out of the dispatcher's context (subagents);
+// a task's worker is found by the session ID on its sub-issue, since list_sessions' tags filter is
+// refused; sweeps and logs are bounded; push_branch and the dispatcher's own echoes get no reply.
+test("the dispatcher keeps plans, diffs and logs out of its own context (#142, #143)", () => {
+  const dir = path.join(ROOT, "agent-skills", "dispatcher");
+  const read = (...p) => fs.readFileSync(path.join(dir, ...p), "utf8").replace(/\s+/g, " ");
+  const skill = read("SKILL.md");
+  for (const p of ["`dispatched <task id>: <session id>`", "tags filter is not currently available",
+    "a plan-writing subagent", "the sha and a 10-line summary", "Never re-read a plan to dispatch it",
+    "the merged diff goes to a subagent", "No reply turn for `push_branch`"]) {
+    assert.ok(skill.includes(p), `SKILL.md says: ${p}`);
+  }
+  assert.ok(!skill.includes("(`list_sessions` with that tag)") && !skill.includes("`list_sessions` by `task:<id>` tag"),
+    "SKILL.md: no lookup through the refused tags filter");
+  const template = read("references", "plan-template.md");
+  assert.ok(template.includes("Base: <owner>/<repo>@<sha>"), "plan-template.md: the plan pins the product repository's base");
+  const prompt = read("references", "worker-prompt.md");
+  assert.ok(prompt.includes("since the plan's `Base:` commit"), "worker rule 5 checks main against the plan's Base");
+  const watch = read("references", "pr-watch.md");
+  for (const p of ["only open PRs", "only the failing checks", "`tail_lines` of 50 or less",
+    "read once"]) {
+    assert.ok(watch.includes(p), `pr-watch.md says: ${p}`);
+  }
+});
