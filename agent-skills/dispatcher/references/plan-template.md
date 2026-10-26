@@ -1,8 +1,10 @@
 # Plan template
 
 A task's plan is `plans/<lane>/<task>.md` in `<owner>/tasks`. Copy this file, fill every
-`<slot>`, and commit it. Kade approves the plan at that commit's sha; the worker reads it at that
-sha. An edit after approval sends the task back to `status:planned`.
+`<slot>`, and commit it. Kade approves the plan at that commit's full sha; the worker reads it at
+that sha. An edit after approval sends the task back to `status:planned`. `Base:` is the task
+repository's `main` when the plan was written: the dispatcher and the worker check that `main` has
+not moved on in the plan's files since then.
 
 The sections are the worker prompt's TASK slots (`references/worker-prompt.md`), so the worker
 follows the plan without needing suggestions.
@@ -11,6 +13,7 @@ follows the plan without needing suggestions.
 # <Task ID>: <task name>
 
 Lane: <owner>/tasks#<queue issue>. Sub-issue: <owner>/tasks#<n>. Repository: <owner>/<repo>.
+Base: <owner>/<repo>@<sha>.
 Branch: claude/<task> from up-to-date main<, or: continue <branch> at <sha>; first review what it holds>.
 Blocked by: <#n, or none>.
 

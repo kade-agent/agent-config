@@ -40,8 +40,8 @@ The queue lives in each org's private repository `<owner>/tasks` (`kade-agent/ta
 3. List the tasks in two groups. Show non-blocked tasks first:
    - **Non-blocked**: needs no decision, task, merge or release from Kade, and no unmerged output of another task (no open `Blocked by:`).
    - **Blocked**: give the blocker for each (Kade's decision, his task, his merge, a release tag, task X).
-4. For each non-blocked task, write its plan file (see 4. Dispatching), commit it to `<owner>/tasks`, label its sub-issue `status:planned`, and say whether it can run beside the others (see 3. Concurrency).
-5. Show Kade the plans as one batch. Dispatch only after he approves the plans, as he changed them, at their plan shas. Record his approval on the queue issue in one comment: his words quoted, and each approved task ID with its plan sha. Then label those sub-issues `status:approved`. Cite that comment in each worker prompt. A plan edited after approval goes back to `status:planned` and to Kade; so does a step he did not approve.
+4. For each non-blocked task, start a plan-writing subagent (`Agent`). It reads the code and the decisions, writes the plan file (see 4. Dispatching), commits it to `<owner>/tasks` and returns the sha and a 10-line summary, so neither the plan's text nor the code it read enters your context (#143). Label the sub-issue `status:planned`, and say whether the task can run beside the others (see 3. Concurrency).
+5. Show Kade the plans as one batch: for each, its link at the full sha and its summary (Kade, 2026-10-26). Dispatch only after he approves the plans, as he changed them, at their plan shas. Record his approval on the queue issue in one comment: his words quoted, and each approved task ID with its plan sha. Then label those sub-issues `status:approved`. Cite that comment in each worker prompt. A plan edited after approval goes back to `status:planned` and to Kade; so does a step he did not approve.
 
 ## 2. Sizing a task
 
@@ -70,7 +70,7 @@ First look for the task's worker: the `dispatched <task id>: <session id>` comme
 
 Then comment `dispatched <task id>: <session id>` on the sub-issue (a replacement worker gets a new comment; none is edited), and label it `status:running`.
 
-The prompt is `references/worker-prompt.md` with every slot filled: the sub-issue, and the plan file at its approved pinned sha. The plan file is a detailed plan the worker follows without needing suggestions:
+The prompt is `references/worker-prompt.md` with every slot filled: the sub-issue, and the plan file's path at its approved full sha. The worker reads the plan itself; never paste it (#142). Never re-read a plan to dispatch it: only check that `main` has not moved on in its files since the plan's `Base:` commit (`git log <base>..origin/main -- <files>` in the task's repository). The plan file is a detailed plan the worker follows without needing suggestions:
 - The goal in one sentence, and the decision references (issue comment IDs, ADR numbers).
 - Exact values and numbers, and how they are stored (units and scales).
 - The files the worker may touch, and the files it must not touch because another worker owns them.
