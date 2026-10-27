@@ -459,7 +459,7 @@ There is no keyless LAN user: `no_auth_user` is removed, and a local dispatcher 
 | Decisions 24 to 28: the dispatcher's 13 signals, `pr_report`, one entry per line, the ignore file, open-only `--state`, quieter lines (event-broker #28) | agent-config (this PR), then event-broker, then `pr-watch.md` and the client pin | open |
 | Redeploy the receiver with the 9-signal `dispatcher` profile (decision 30) | Kade | done 2026-10-26 (event-broker#31, cb47058) |
 | Ignore lines matched on the event's time (event-broker#32 point 4) | event-broker#33, agent-config#158 | merged 2026-10-27 |
-| Decision 31: `WATCH-ARMED` only with a backlog; silence means armed | event-broker, then `pr-watch.md` and the client pin | next |
+| Decision 31: `WATCH-ARMED` only with a backlog; silence means armed | event-broker#34, agent-config (this PR) | merged 2026-10-27 |
 | Decision 32: `main_info` and `MAIN_INFO_WORKFLOWS` | event-broker, then Kade redeploys and sets the list | next |
 | Decision 33: the `LEASE` bucket, `--session`, `WATCH-REFUSED` | event-broker (stream, NATS config, client), then Kade redeploys, then `pr-watch.md` | next |
 
@@ -662,7 +662,8 @@ clone of event-broker at a pinned commit, after `npm ci --omit=dev`.
   - `WATCH_PIDFILE`: default `~/.claude/dispatcher/watch-<owner>.pid`;
   - `WATCH_IGNOREFILE` (decision 26): default `~/.claude/dispatcher/ignore-<owner>`.
 - **First line:** `WATCH-ARMED <owner> consumer=<profile> unprocessed=<n>`, printed after the
-  stream's subjects proved to be `ev.<owner>.>`. A key for another org's account prints
+  stream's subjects proved to be `ev.<owner>.>`: on stdout when `unprocessed` is above 0, else on
+  stderr (decision 31, event-broker#34). A key for another org's account prints
   `BROKER-DOWN key is for another account`.
 - **Command (decision 17):** `--window <s>`, default 30. `--window 0` prints one line per event.
 - **`--state <owner>/<repo>` (decision 21):** reads `STATE` with the reader key and exits 0: first

@@ -38,13 +38,13 @@ The client prints it as one entry of a summary line (see The lines below). Its f
 ## Arming the broker Monitor
 
 The watch is event-broker's `client/watch.js`, a Node 22+ program run from a clone of
-`kade-agent/event-broker` at a reviewed commit (`921c8a773989f5f45887a9d99ad7edaf5b5492cd`).
+`kade-agent/event-broker` at a reviewed commit (`146133e4e1d4442c5d95a6767aa17e57edab0659`).
 Install it once per pin, on the PC:
 
 ```bash
 d="$HOME/.claude/dispatcher/event-broker"
 if [ -d "$d/.git" ]; then git -C "$d" fetch origin; else git clone https://github.com/kade-agent/event-broker "$d"; fi
-git -C "$d" checkout --detach 921c8a773989f5f45887a9d99ad7edaf5b5492cd
+git -C "$d" checkout --detach 146133e4e1d4442c5d95a6767aa17e57edab0659
 npm ci --omit=dev --prefix "$d"
 ```
 
@@ -74,9 +74,10 @@ node "$HOME/.claude/dispatcher/event-broker/client/watch.js" --owner <org> --pro
 
 Every stdout line is one of these:
 
-- `WATCH-ARMED <org> consumer=dispatcher unprocessed=<n>`: the first line, printed once the stream
-  proved to be the org's. If no such line comes within 30 s, the Monitor is not armed: use the gh
-  poll.
+- `WATCH-ARMED <org> consumer=dispatcher unprocessed=<n>`: printed once the stream proved to be the
+  org's, on stdout only when `unprocessed` is above 0 (the backlog's summary follows); otherwise it
+  goes to stderr, the Monitor's log, and costs no turn (decision 31). So silence means armed: every
+  failure prints `BROKER-DOWN` on stdout before the watch exits, and you wait for nothing.
 - a summary: a header line, `SUMMARY <n> events <k> entries` (with ` ignored=<i>` when the ignore
   file below dropped any), then one entry per line, most urgent first (`pr_merged`, `pr_closed`,
   `pr_report`, `main_failed`, `merge_dirty`, `merge_behind`, `main_passed`, then the rest): every
@@ -152,14 +153,13 @@ watch gets those events.
   install and no `PATH` to set. `--json` prints `{"summary": true, "count": <n>, "events": [<v2
   object>, …]}` instead of the line. `--window 0` prints one entry per line, without `SUMMARY`.
 - **Checked live.** Not yet: the client is NOT VERIFIED until Kade's release and live check, where a
-  Monitor on the PC and one in the cloud print `WATCH-ARMED`, then real events as signal lines. What
+  Monitor on the PC and one in the cloud stay silent until real events come as signal lines. What
   was checked earlier: a cloud session reached the NAS over `wss://` from Node (`wsconnect`, a reader
   key, with or without `NODE_USE_ENV_PROXY`), and the v1 watch worked from the PC and from the cloud.
 
 ## The gh-poll fallback
 
-Use it when `EVENT_BROKER_URL` is unset, when no `WATCH-ARMED` comes within 30 s, or when
-`BROKER-DOWN` comes twice in a row. The poll runs
+Use it when `EVENT_BROKER_URL` is unset, or when `BROKER-DOWN` comes twice in a row. The poll runs
 as a `Monitor` command:
 
 - Every 60 s, run `gh pr list` on each queue repository for `claude/*` PRs.
@@ -253,15 +253,16 @@ The cloud environment's settings:
 - **Network access:** allows `<nats host>`.
 - **Setup script:** installs the pinned client and nothing else:
   ```bash
-  git clone https://github.com/kade-agent/event-broker /root/event-broker && git -C /root/event-broker checkout --detach 921c8a773989f5f45887a9d99ad7edaf5b5492cd && npm ci --omit=dev --prefix /root/event-broker
+  git clone https://github.com/kade-agent/event-broker /root/event-broker && git -C /root/event-broker checkout --detach 146133e4e1d4442c5d95a6767aa17e57edab0659 && npm ci --omit=dev --prefix /root/event-broker
   ```
 - **Monitor command:**
   `node /root/event-broker/client/watch.js --owner <org> --profile dispatcher`.
 
 A setup script cannot see the environment's variables, so it never writes the seed. Instead,
 `watch.js` writes the key file from `EVENT_BROKER_CLOUD_SEED` when it starts and the file is
-missing, at mode 600, and never prints it. The first line, `WATCH-ARMED`, is also the check that
-the path works: it counts the messages waiting without taking one.
+missing, at mode 600, and never prints it. A path that does not work prints `BROKER-DOWN`; a
+working one stays silent (or prints `WATCH-ARMED` with a backlog), having counted the messages
+waiting without taking one.
 
 Verified live 2026-10-25 with the v1 watch: a cloud session read `issue_comment`, `issues`
 `closed` and a `workflow_run` on `main` within seconds over websocket with the stella-rain reader

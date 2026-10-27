@@ -520,14 +520,14 @@ test("the dispatcher keeps plans, diffs and logs out of its own context (#142, #
 
 // Decisions 24 to 28 (event-broker #28, #30): workers learn CI, reviews and merges from their own PR
 // subscription; the dispatcher forwards only conflicts, finds a stalled worker with get_session,
-// writes the ignore file for its labels and closes (decision 30), and runs the client pinned at event-broker 921c8a7.
+// writes the ignore file for its labels and closes (decision 30), and runs the client pinned at event-broker 146133e.
 test("pr-watch.md and SKILL.md follow the 9-signal dispatcher profile (decisions 24 to 30)", () => {
   const dir = path.join(ROOT, "agent-skills", "dispatcher");
   const read = (...p) => fs.readFileSync(path.join(dir, ...p), "utf8").replace(/\s+/g, " ");
   const watch = read("references", "pr-watch.md");
   const pins = watch.match(/checkout --detach [0-9a-f]{40}/g) || [];
-  assert.ok(pins.length >= 2 && pins.every((p) => p.endsWith("921c8a773989f5f45887a9d99ad7edaf5b5492cd")),
-    "pr-watch.md: both install lines pin event-broker 921c8a7 (event-broker#33: ignore lines by the event's time)");
+  assert.ok(pins.length >= 2 && pins.every((p) => p.endsWith("146133e4e1d4442c5d95a6767aa17e57edab0659")),
+    "pr-watch.md: both install lines pin event-broker 146133e (event-broker#34, decision 31)");
   for (const p of ["ignore-<org>", "label <owner>/<repo>#<n> <label>", "close <owner>/<repo>#<n>", "SUMMARY <n> events <k> entries", "--alive",
     "`--all`", "a subscription does not deliver a conflict"]) {
     assert.ok(watch.includes(p), `pr-watch.md says: ${p}`);
@@ -659,4 +659,13 @@ test("the dispatcher attaches only <owner>/tasks; plan writers, helpers and work
   assert.ok(prompt.includes("- Sibling clones:"), "worker-prompt.md: the Sibling clones slot");
   const worker = norm("task-worker", "SKILL.md");
   assert.ok(worker.includes("`Sibling clones:`"), "task-worker reads the Sibling clones slot");
+});
+
+// Decision 31 (Kade, 2026-10-27; event-broker#34): a watch that prints nothing is armed. WATCH-ARMED
+// reaches the session only with a backlog, and the gh poll starts on BROKER-DOWN, not a missing line.
+test("pr-watch.md: silence means armed (decision 31)", () => {
+  const watch = fs.readFileSync(path.join(ROOT, "agent-skills", "dispatcher", "references", "pr-watch.md"), "utf8").replace(/\s+/g, " ");
+  assert.ok(watch.includes("silence means armed"), "pr-watch.md: a watch that prints nothing is armed");
+  assert.ok(watch.includes("only when `unprocessed` is above 0"), "pr-watch.md: WATCH-ARMED reaches the session only with a backlog");
+  assert.ok(!watch.includes("within 30 s"), "pr-watch.md: no 30 s wait for WATCH-ARMED");
 });
