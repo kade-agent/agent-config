@@ -537,3 +537,26 @@ test("pr-watch.md and SKILL.md follow the 9-signal dispatcher profile (decisions
   const prompt = read("references", "worker-prompt.md");
   assert.ok(!prompt.includes("going 2 hours without a push"), "worker rule 6: no push clock");
 });
+
+// Kade (2026-10-27): a worker prompt restated ~1,500 words of hard rules for every task, written by
+// the dispatcher as output and kept in its context. The rules live in the `task-worker` skill, which
+// the worker loads; the message holds only the task's slots, each named, and ends with the plan.
+test("the worker's hard rules live in the task-worker skill; the dispatcher's message holds only slots and the plan", () => {
+  const file = path.join(ROOT, "agent-skills", "task-worker", "SKILL.md");
+  assert.ok(fs.existsSync(file), "agent-skills/task-worker/SKILL.md exists");
+  const rules = fs.readFileSync(file, "utf8");
+  for (const p of ["HARD RULES", "subscribe_pr_activity", "PUSH after every commit", "mergeable state yourself",
+    "A placeholder is a value", "Known moves", "Version:"]) {
+    assert.ok(rules.includes(p), `task-worker says: ${p}`);
+  }
+  const prompt = fs.readFileSync(path.join(ROOT, "agent-skills", "dispatcher", "references", "worker-prompt.md"), "utf8");
+  const block = /```text\n([^]*?)\n```/.exec(prompt)[1];
+  assert.ok(!block.includes("HARD RULES"), "the message does not restate the hard rules");
+  assert.ok(block.includes("`task-worker`"), "the message tells the worker to load task-worker");
+  for (const slot of ["Merge path:", "Protected paths:", "Leave alone:", "Read first:", "Approval:",
+    "Other running workers:", "Generated files:", "Known moves since Base:"]) {
+    assert.ok(block.includes(slot), `the message has the slot ${slot}`);
+  }
+  assert.ok(block.split("\n").length <= 20, "the message is at most 20 lines");
+  assert.match(block.trim().split("\n").pop(), /^TASK .*Plan: <plan path> at <full plan sha>/, "the plan is the message's last line");
+});
