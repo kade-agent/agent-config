@@ -180,6 +180,35 @@ still woke for events it does not act on; fewer wakes and fewer writes.
       check-in (a `send_later` only while no Monitor is armed); one nudge, then the replacement.
     - Order: event-broker first; then an agent-config PR moves the pin (`pr-watch.md`) and its signal
       table, ignore-file text and section 9 Profiles to 9 signals.
+31. **A watch that prints nothing is armed (event-broker#32 point 2; Kade, 2026-10-27, "change to
+    simpler"):** `WATCH-ARMED` cost a dispatcher turn on every re-arm (~every 25 min) with
+    `unprocessed=0`. The client prints it on stdout only when `unprocessed>0`, where the backlog's
+    summary follows and wakes the session anyway; otherwise it goes to stderr, which reaches the
+    Monitor's log and not the session. The 30 s arm check goes: every failure already prints
+    `BROKER-DOWN <why>` on stdout before it exits (connect, auth, another account's key, settings),
+    so silence means armed and the dispatcher waits for nothing. The gh-poll fallback starts on
+    `BROKER-DOWN` twice in a row, not on a missing `WATCH-ARMED`. Client only; no redeploy.
+32. **`main_info` for workflows built to end red (event-broker#32 point 3; Kade, 2026-10-27):** a
+    bump job that reports "does not build yet" while its fix is planned woke the dispatcher twice
+    as `main_failed` and sat in `red=`. The receiver reads `MAIN_INFO_WORKFLOWS`, a comma-separated
+    list of `<owner>/<repo>:<workflow name>` (per repository, since workflow names repeat across
+    repositories; empty by default). A completed run on `main` of a listed workflow is published
+    as `main_info`, with its `conclusion`, whatever the result, and never enters the repository's
+    `red` state, so `red=` stays the real breakage. `main_info` is not in the `dispatcher` profile:
+    it never wakes the dispatcher, and the `all` profile and `EVENTS` keep it. Receiver change;
+    Kade redeploys and sets the list.
+33. **One reader per org, by lease (event-broker#32 point 6; Kade, 2026-10-27, "lease"):** two
+    sessions on the `dispatcher` consumer split its events between them, and the pidfile guards
+    one machine only. At start, `src/stream.js` creates in each owner's account a key-value bucket
+    `LEASE` (history 1, `max_age` 35 min: the 30-minute watch deadline and a margin). On arm, after
+    the stream check, the client takes the key `<profile>` with its `--session <id>` (the
+    dispatcher's own session id): it creates the key when it is absent or expired, and updates it
+    (renewing the 35 minutes) when it already holds its own id, both by revision so two arms cannot
+    both win. A live key holding another id ends the client with `WATCH-REFUSED holder=<id>` on
+    stdout and exit 4, before it reads anything. `--take` overwrites a live key: only on Kade's
+    word, when the holder is known to be gone. Without `--session` the client runs as today (no
+    lease), for the `all` profile and tests. The reader users get permission on `LEASE` only, in
+    `nats/nats-server.conf`. Receiver, NATS config and client; Kade redeploys.
 
 Decision 6 changes with decision 11: LAN access needs a key now (section 7). Decision 7 stays, with
 one dispatcher per org.
@@ -429,6 +458,10 @@ There is no keyless LAN user: `no_auth_user` is removed, and a local dispatcher 
 | Decision 23: a comment's DONE/BLOCKED line in its event | event-broker #27 (merged 2026-10-25), agent-config (this PR) | open |
 | Decisions 24 to 28: the dispatcher's 13 signals, `pr_report`, one entry per line, the ignore file, open-only `--state`, quieter lines (event-broker #28) | agent-config (this PR), then event-broker, then `pr-watch.md` and the client pin | open |
 | Redeploy the receiver with the 9-signal `dispatcher` profile (decision 30) | Kade | done 2026-10-26 (event-broker#31, cb47058) |
+| Ignore lines matched on the event's time (event-broker#32 point 4) | event-broker#33, agent-config#158 | merged 2026-10-27 |
+| Decision 31: `WATCH-ARMED` only with a backlog; silence means armed | event-broker, then `pr-watch.md` and the client pin | next |
+| Decision 32: `main_info` and `MAIN_INFO_WORKFLOWS` | event-broker, then Kade redeploys and sets the list | next |
+| Decision 33: the `LEASE` bucket, `--session`, `WATCH-REFUSED` | event-broker (stream, NATS config, client), then Kade redeploys, then `pr-watch.md` | next |
 
 **Settled:**
 - The two runtime dependencies `@nats-io/transport-node` and `@nats-io/jetstream` (3.4.0, pinned)
