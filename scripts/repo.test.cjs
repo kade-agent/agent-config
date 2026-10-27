@@ -285,10 +285,11 @@ test("the dispatcher skill names its worker prompt, and the prompt keeps the rul
   const dir = path.join(ROOT, "agent-skills", "dispatcher");
   const skill = fs.readFileSync(path.join(dir, "SKILL.md"), "utf8");
   assert.ok(skill.includes("references/worker-prompt.md"), "SKILL.md names references/worker-prompt.md");
+  // The rules the worker prompt held live in the task-worker skill (2026-10-27).
   for (const p of ["task_model", "decision_model", "non_blocked", "[Dispatcher]", "send_later"]) {
     assert.ok(skill.includes(p), `SKILL.md names ${p}`);
   }
-  const prompt = fs.readFileSync(path.join(dir, "references", "worker-prompt.md"), "utf8");
+  const prompt = fs.readFileSync(path.join(ROOT, "agent-skills", "task-worker", "SKILL.md"), "utf8");
   for (const p of ["subscribe_pr_activity", "PUSH after every commit", "mergeable state yourself", "BLOCKED <task id>", "Never one big commit"]) {
     assert.ok(prompt.includes(p), `the worker prompt keeps: ${p}`);
   }
@@ -311,7 +312,7 @@ test("the dispatcher skill and its worker prompt follow the global rules", () =>
     assert.ok(skill.includes(p), `SKILL.md says: ${p}`);
   }
   assert.ok(!skill.includes("That is your call, not Kade's"), "the dispatcher does not widen a task's scope itself");
-  const prompt = fs.readFileSync(path.join(dir, "references", "worker-prompt.md"), "utf8");
+  const prompt = fs.readFileSync(path.join(ROOT, "agent-skills", "task-worker", "SKILL.md"), "utf8");
   for (const p of ["Kade approved this plan", "A placeholder is a value", "new dependency",
     "the repository's merge path"]) {
     assert.ok(prompt.includes(p), `the worker prompt says: ${p}`);
@@ -400,9 +401,9 @@ test("the dispatcher skill says how it watches PR events and tells the worker at
   assert.ok(!watch.includes('"event": "check_run"'), "pr-watch.md: the example event is one the filtered consumer delivers");
   assert.ok(watch.includes("WATCH_PIDFILE") && watch.includes("watch-<org>.pid"), "pr-watch.md: one pidfile per org");
   assert.ok(!watch.includes("Until one has, a cloud dispatcher uses the gh-poll fallback"), "pr-watch.md: the cloud path is verified");
-  const worker = fs.readFileSync(path.join(dir, "references", "worker-prompt.md"), "utf8");
+  const worker = fs.readFileSync(path.join(ROOT, "agent-skills", "task-worker", "SKILL.md"), "utf8");
   assert.match(worker, /message from the dispatcher about your PR is a wake/, "worker rule 9 counts it as a wake");
-  assert.ok(worker.includes("connector"), "worker-prompt.md: cloud workers without gh use the connector tools");
+  assert.ok(worker.includes("connector"), "task-worker: cloud workers without gh use the connector tools");
 });
 
 // Task lanes (Kade, 2026-10-24 and 2026-10-25, issue #118): each lane is a queue issue in the
@@ -424,7 +425,7 @@ test("the dispatcher runs lanes of sub-issues in <owner>/tasks with plans as fil
   for (const gone of ["`status:planned`", "`status:approved`", "`status:running`"]) {
     assert.ok(!skill.includes(gone), `SKILL.md no longer writes ${gone}`);
   }
-  const prompt = fs.readFileSync(path.join(dir, "references", "worker-prompt.md"), "utf8").replace(/\s+/g, " ");
+  const prompt = fs.readFileSync(path.join(ROOT, "agent-skills", "task-worker", "SKILL.md"), "utf8").replace(/\s+/g, " ");
   for (const p of ["plan at the pinned sha", "`main` moved on in your files", "Your pushes are your progress",
     "`Closes <owner>/tasks#<n>`", "posts the line on the sub-issue", "a merge is your DONE", "## Follow-ups"]) {
     assert.ok(prompt.includes(p), `the worker prompt says: ${p}`);
@@ -461,7 +462,7 @@ test("the dispatcher keeps its work items only in <owner>/tasks and relays the w
     "A merge is the DONE", "a strict `BLOCKED <task id>: …` line", "as a comment on its own PR"]) {
     assert.ok(skill.includes(p), `SKILL.md says: ${p}`);
   }
-  const prompt = fs.readFileSync(path.join(dir, "references", "worker-prompt.md"), "utf8").replace(/\s+/g, " ");
+  const prompt = fs.readFileSync(path.join(ROOT, "agent-skills", "task-worker", "SKILL.md"), "utf8").replace(/\s+/g, " ");
   for (const p of ["`Closes <owner>/tasks#<n>`, never a bare `#<n>`",
     "a merge is your DONE",
     "Only when you have no PR yet, or the comment cannot be posted, send the same line with send_message",
@@ -503,10 +504,10 @@ test("the dispatcher keeps plans, diffs and logs out of its own context (#142, #
     "SKILL.md: no lookup through the refused tags filter");
   // Kade (2026-10-26): no post-merge review while features are built fast; an issue tracks adding it back.
   assert.ok(!skill.includes("Auto-merge merges a worker's PR") && !skill.includes("risky"), "SKILL.md: no post-merge diff review");
-  assert.ok(!read("references", "worker-prompt.md").includes("say in the PR body that you ran"), "the worker prompt: no /code-review statement for the dispatcher");
+  assert.ok(!fs.readFileSync(path.join(ROOT, "agent-skills", "task-worker", "SKILL.md"), "utf8").includes("say in the PR body that you ran"), "the worker prompt: no /code-review statement for the dispatcher");
   const template = read("references", "plan-template.md");
   assert.ok(template.includes("Base: <owner>/<repo>@<sha>"), "plan-template.md: the plan pins the product repository's base");
-  const prompt = read("references", "worker-prompt.md");
+  const prompt = fs.readFileSync(path.join(ROOT, "agent-skills", "task-worker", "SKILL.md"), "utf8").replace(/\s+/g, " ");
   assert.ok(prompt.includes("since the plan's `Base:` commit"), "worker rule 5 checks main against the plan's Base");
   const watch = read("references", "pr-watch.md");
   for (const p of ["only open PRs", "only its failed or pending checks", "`tail_lines` of 50 or less",
@@ -534,7 +535,7 @@ test("pr-watch.md and SKILL.md follow the 9-signal dispatcher profile (decisions
   const skill = read("SKILL.md");
   assert.ok(skill.includes("after each label you set or sub-issue you close"), "SKILL.md: the ignore file covers closes");
   assert.ok(!skill.includes("No push for 2 hours"), "SKILL.md: a stalled worker is found by get_session, not pushes");
-  const prompt = read("references", "worker-prompt.md");
+  const prompt = fs.readFileSync(path.join(ROOT, "agent-skills", "task-worker", "SKILL.md"), "utf8").replace(/\s+/g, " ");
   assert.ok(!prompt.includes("going 2 hours without a push"), "worker rule 6: no push clock");
 });
 
