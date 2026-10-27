@@ -588,3 +588,18 @@ test("the plan-writing subagent reads references/plan-writer.md; its message hol
   const template = fs.readFileSync(path.join(dir, "references", "plan-template.md"), "utf8");
   assert.ok(template.includes("## Questions for Kade"), "plan-template.md has an optional Questions for Kade section");
 });
+
+// agent-config#154 changes 3 and 9 (Kade, 2026-10-27; no handover by the worker): two workers
+// grew to 320k context each and cost $10.64. A task that would take a worker past ~200k is split at
+// the plan stage, and a worker keeps build and test logs out of its context.
+test("workers stay under ~200k: split at the plan stage, logs kept out of context", () => {
+  const norm = (...p) => fs.readFileSync(path.join(ROOT, "agent-skills", ...p), "utf8").replace(/\s+/g, " ");
+  const skill = norm("dispatcher", "SKILL.md");
+  assert.ok(skill.includes("past ~200k"), "SKILL.md 2. Sizing: the ~200k worker context limit");
+  assert.ok(skill.includes("split it at the plan stage"), "SKILL.md 2. Sizing: the split happens when the plan is written");
+  const writer = norm("dispatcher", "references", "plan-writer.md");
+  assert.ok(writer.includes("past ~200k"), "plan-writer.md: the plan writer judges the size");
+  const worker = norm("task-worker", "SKILL.md");
+  assert.ok(worker.includes("2>&1 | tail -50"), "task-worker: build and test output is cut");
+  assert.ok(worker.includes("never read a whole log"), "task-worker: no full log in the session");
+});
