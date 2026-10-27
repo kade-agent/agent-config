@@ -600,6 +600,6 @@ test("workers stay under ~200k: split at the plan stage, logs kept out of contex
   const writer = norm("dispatcher", "references", "plan-writer.md");
   assert.ok(writer.includes("past ~200k"), "plan-writer.md: the plan writer judges the size");
   const worker = norm("task-worker", "SKILL.md");
-  assert.ok(worker.includes("2>&1 | tail -50"), "task-worker: build and test output is cut");
+  assert.ok(worker.includes("echo exit=$?; tail -50 <log>"), "task-worker: build and test output is cut, the exit code kept");
   assert.ok(worker.includes("never read a whole log"), "task-worker: no full log in the session");
 });
