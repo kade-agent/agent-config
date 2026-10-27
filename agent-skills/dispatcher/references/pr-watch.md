@@ -26,7 +26,9 @@ The client prints it as one entry of a summary line (see The lines below). Its f
   red. The dispatcher never recomputes it.
 - `delivery` is the message's own id, on every v2 message.
 - A check with no PR has `pr: null`; on `main` it is `main_failed`, or `main_passed`
-  when that workflow turns green after failing (a pass that changes nothing does not arrive).
+  when that workflow turns green after failing (a pass that changes nothing does not arrive). A
+  workflow built to end red, listed in the receiver's `MAIN_INFO_WORKFLOWS`, is `main_info` there,
+  never `main_failed` or in `red=`; the `dispatcher` profile does not read it (decision 32).
 - Issue signals come from a task's sub-issue (`issue` is its number, with `label` or
   `state_reason` where they apply) and carry `comment` (`author`, `url`) for a comment. A comment
   on a PR is `pr_report` when its first line is a strict BLOCKED line, else `pr_comment`;

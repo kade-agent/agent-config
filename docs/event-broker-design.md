@@ -460,7 +460,7 @@ There is no keyless LAN user: `no_auth_user` is removed, and a local dispatcher 
 | Redeploy the receiver with the 9-signal `dispatcher` profile (decision 30) | Kade | done 2026-10-26 (event-broker#31, cb47058) |
 | Ignore lines matched on the event's time (event-broker#32 point 4) | event-broker#33, agent-config#158 | merged 2026-10-27 |
 | Decision 31: `WATCH-ARMED` only with a backlog; silence means armed | event-broker#34, agent-config (this PR) | merged 2026-10-27 |
-| Decision 32: `main_info` and `MAIN_INFO_WORKFLOWS` | event-broker, then Kade redeploys and sets the list | next |
+| Decision 32: `main_info` and `MAIN_INFO_WORKFLOWS` | event-broker#35 (cbef5b5), agent-config (this PR); then Kade redeploys and sets the list | merged 2026-10-27 |
 | Decision 33: the `LEASE` bucket, `--session`, `WATCH-REFUSED` | event-broker (stream, NATS config, client), then Kade redeploys, then `pr-watch.md` | next |
 
 **Settled:**
@@ -520,6 +520,7 @@ anything else (`cancelled`, `skipped`, `neutral`, `stale`, null).
 | `mergeable` | `mergeable_state` `behind`, `dirty`, `clean`, `blocked`, `unstable`, `draft`; else | `merge_<state>`; `merge_other` |
 | `workflow_run` | with a PR: failed / passed / other | `ci_failed` / `ci_passed` / `ci_other` |
 | `workflow_run` | no PR, on main | `main_failed` / `main_passed` or `main_still_passed` (below) / `main_other` |
+| `workflow_run` | no PR, on main, a workflow in `MAIN_INFO_WORKFLOWS` | `main_info` (decision 32), whatever the result |
 | `workflow_run` | no PR, another branch | `branch_failed` / `branch_passed` / `branch_other` |
 | `check_run`, `check_suite` | any branch | `check_failed` / `check_passed` / `check_other` |
 | `pull_request_review` | state `changes_requested`, `commented`, `approved`, `dismissed`; else | `review_changes`, `review_comment`, `review_approved`, `review_dismissed`; `review_other` |
@@ -528,7 +529,7 @@ anything else (`cancelled`, `skipped`, `neutral`, `stale`, null).
 | `push` | to main | `push_main` |
 | `push` | to a task branch (`claude/*`, `agent/*`), not a deletion (decision 18) | `push_branch` |
 
-That is 39 signals. `check_run` and `check_suite` get their own signals so one red run is not three
+That is 40 signals. `check_run` and `check_suite` get their own signals so one red run is not three
 `ci_failed`.
 
 **Task branch pushes (decision 18).** `push_branch` is published to `EVENTS` only; v1 (`GITHUB`)
@@ -639,7 +640,7 @@ durable consumer of `EVENTS` with that name: explicit acks, new messages only, a
 - `all`: every signal (`ev.<owner>.>`), for debugging. Nothing reads it by default.
 
 The `dispatcher` profile leaves out `ci_passed`, `automerge_on`, `merge_clean`, `merge_blocked`,
-`merge_unstable`, `merge_draft`, `merge_other`, `main_still_passed`, `review_approved`, `review_dismissed`, the
+`merge_unstable`, `merge_draft`, `merge_other`, `main_still_passed`, `main_info`, `review_approved`, `review_dismissed`, the
 `*_other` signals and, since decision 24, `ci_failed`, `review_changes`, `review_comment`,
 `push_branch`, `pr_comment` and `issue_comment`: the worker's own PR subscription brings it CI,
 reviews and comments. Decision 30 also drops `pr_ready`, `pr_draft`, `automerge_off` and
