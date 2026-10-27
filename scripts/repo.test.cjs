@@ -421,10 +421,12 @@ test("the dispatcher runs lanes of sub-issues in <owner>/tasks with plans as fil
     assert.ok(skill.includes(p), `SKILL.md says: ${p}`);
   }
   assert.ok(!skill.includes("edited after each event"), "the status comment is gone: state is rebuilt from the issues");
-  // Decision 30: only status:blocked is a label; the other states are read, not written.
-  for (const gone of ["`status:planned`", "`status:approved`", "`status:running`"]) {
-    assert.ok(!skill.includes(gone), `SKILL.md no longer writes ${gone}`);
+  // DS134 (Kade, 2026-10-27, stella-rain/tasks#137) replaces decision 30's single label: every open
+  // task carries exactly one status label, which the dispatcher swaps at each change.
+  for (const label of ["`status:pending`", "`status:planned`", "`status:approved`", "`status:held`", "`status:running`", "`status:blocked`"]) {
+    assert.ok(skill.includes(label), `SKILL.md writes ${label}`);
   }
+  assert.ok(skill.includes("exactly one `status:` label"), "SKILL.md: one status label per open task, none on a closed one");
   const prompt = fs.readFileSync(path.join(ROOT, "agent-skills", "task-worker", "SKILL.md"), "utf8").replace(/\s+/g, " ");
   for (const p of ["plan at the pinned sha", "`main` moved on in your files", "Your pushes are your progress",
     "`Closes <owner>/tasks#<n>`", "posts the line on the sub-issue", "a merge is your DONE", "## Follow-ups"]) {
@@ -518,14 +520,14 @@ test("the dispatcher keeps plans, diffs and logs out of its own context (#142, #
 
 // Decisions 24 to 28 (event-broker #28, #30): workers learn CI, reviews and merges from their own PR
 // subscription; the dispatcher forwards only conflicts, finds a stalled worker with get_session,
-// writes the ignore file after its labels and closes (decision 30), and runs the client pinned at event-broker cb47058.
+// writes the ignore file for its labels and closes (decision 30), and runs the client pinned at event-broker 921c8a7.
 test("pr-watch.md and SKILL.md follow the 9-signal dispatcher profile (decisions 24 to 30)", () => {
   const dir = path.join(ROOT, "agent-skills", "dispatcher");
   const read = (...p) => fs.readFileSync(path.join(dir, ...p), "utf8").replace(/\s+/g, " ");
   const watch = read("references", "pr-watch.md");
   const pins = watch.match(/checkout --detach [0-9a-f]{40}/g) || [];
-  assert.ok(pins.length >= 2 && pins.every((p) => p.endsWith("cb4705813614141a446295fa0da04f5882efb37b")),
-    "pr-watch.md: both install lines pin event-broker cb47058");
+  assert.ok(pins.length >= 2 && pins.every((p) => p.endsWith("921c8a773989f5f45887a9d99ad7edaf5b5492cd")),
+    "pr-watch.md: both install lines pin event-broker 921c8a7 (event-broker#33: ignore lines by the event's time)");
   for (const p of ["ignore-<org>", "label <owner>/<repo>#<n> <label>", "close <owner>/<repo>#<n>", "SUMMARY <n> events <k> entries", "--alive",
     "`--all`", "a subscription does not deliver a conflict"]) {
     assert.ok(watch.includes(p), `pr-watch.md says: ${p}`);
@@ -620,4 +622,21 @@ test("the dispatcher keeps its context small: Sonnet plan writers, a Haiku helpe
   assert.ok(skill.includes("waits for the next report that needs Kade"), "SKILL.md 7. Reporting: merge reports are batched");
   assert.ok(skill.includes("its link, never its summary restated"), "SKILL.md 7. Reporting: a plan is linked");
   assert.ok(norm("references", "pr-watch.md").includes("the check-in helper"), "pr-watch.md: the re-arm sweep goes through the helper");
+});
+
+// DS134 (Kade, 2026-10-27, stella-rain/tasks#137) and agent-config#154 changes 6, 7 and 11: the queue
+// issue holds only epics, the queue is read with label searches (get_sub_issues returned ~900k
+// characters once), one comment per merge, and an ignore line matches on the event's own time.
+test("the queue shape of DS134: epics only, label searches, one comment per merge", () => {
+  const norm = (...p) => fs.readFileSync(path.join(ROOT, "agent-skills", "dispatcher", ...p), "utf8").replace(/\s+/g, " ");
+  const skill = norm("SKILL.md");
+  for (const p of ["holds only epics and the roadmap", "a sub-issue of exactly one epic", "100 sub-issues", "part 2",
+    "When a wave ends", "never `get_sub_issues`", "one comment on the sub-issue", "the DONE line",
+    "needs Kade or becomes a task"]) {
+    assert.ok(skill.includes(p), `SKILL.md says: ${p}`);
+  }
+  const watch = norm("references", "pr-watch.md");
+  assert.ok(watch.includes("by the event's own time"), "pr-watch.md: ignore lines match on the event's time");
+  assert.ok(watch.includes("60 s before the line to 1 h after it"), "pr-watch.md: the span of an ignore line");
+  assert.ok(!watch.includes("of the next hour"), "pr-watch.md: no read-time hour");
 });
