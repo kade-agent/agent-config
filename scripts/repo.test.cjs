@@ -520,14 +520,14 @@ test("the dispatcher keeps plans, diffs and logs out of its own context (#142, #
 
 // Decisions 24 to 28 (event-broker #28, #30): workers learn CI, reviews and merges from their own PR
 // subscription; the dispatcher forwards only conflicts, finds a stalled worker with get_session,
-// writes the ignore file for its labels and closes (decision 30), and runs the client pinned at event-broker 146133e.
+// writes the ignore file for its labels and closes (decision 30), and runs the client pinned at event-broker 6d26aa8.
 test("pr-watch.md and SKILL.md follow the 9-signal dispatcher profile (decisions 24 to 30)", () => {
   const dir = path.join(ROOT, "agent-skills", "dispatcher");
   const read = (...p) => fs.readFileSync(path.join(dir, ...p), "utf8").replace(/\s+/g, " ");
   const watch = read("references", "pr-watch.md");
   const pins = watch.match(/checkout --detach [0-9a-f]{40}/g) || [];
-  assert.ok(pins.length >= 2 && pins.every((p) => p.endsWith("146133e4e1d4442c5d95a6767aa17e57edab0659")),
-    "pr-watch.md: both install lines pin event-broker 146133e (event-broker#34, decision 31)");
+  assert.ok(pins.length >= 2 && pins.every((p) => p.endsWith("6d26aa81b5e092b18b9fdc9d009d2d399148d52f")),
+    "pr-watch.md: both install lines pin event-broker 6d26aa8 (event-broker#36, decision 33)");
   for (const p of ["ignore-<org>", "label <owner>/<repo>#<n> <label>", "close <owner>/<repo>#<n>", "SUMMARY <n> events <k> entries", "--alive",
     "`--all`", "a subscription does not deliver a conflict"]) {
     assert.ok(watch.includes(p), `pr-watch.md says: ${p}`);
@@ -679,4 +679,19 @@ test("main_info: the signal table, the dispatcher's leave-out list and pr-watch.
   assert.ok(design.includes("`main_still_passed`, `main_info`,"), "design: the dispatcher profile leaves out main_info");
   const watch = fs.readFileSync(path.join(ROOT, "agent-skills", "dispatcher", "references", "pr-watch.md"), "utf8").replace(/\s+/g, " ");
   assert.ok(watch.includes("`MAIN_INFO_WORKFLOWS`") && watch.includes("`main_info`"), "pr-watch.md: a listed workflow never arrives as main_failed");
+});
+
+// Decision 33 (Kade, 2026-10-27, "lease", then B: a stream; event-broker#36, redeployed): one reader per
+// org. Every Monitor command passes this session's id; WATCH-REFUSED (exit 4) means another session of
+// the org holds the lease, and --take is only Kade's call.
+test("pr-watch.md: the watch holds the org's lease with --session; WATCH-REFUSED stops it (decision 33)", () => {
+  const watch = fs.readFileSync(path.join(ROOT, "agent-skills", "dispatcher", "references", "pr-watch.md"), "utf8").replace(/\s+/g, " ");
+  const monitors = watch.match(/client\/watch\.js"? --owner <org> --profile dispatcher[^`]*/g) || [];
+  assert.ok(monitors.length >= 2 && monitors.every((m) => m.includes("--session <this session's id>")), "pr-watch.md: every Monitor command passes --session");
+  for (const p of ["`WATCH-REFUSED holder=<id>`", "4, `WATCH-REFUSED`", "`--take` only when Kade says"]) {
+    assert.ok(watch.includes(p), `pr-watch.md says: ${p}`);
+  }
+  const design = fs.readFileSync(path.join(ROOT, "docs", "event-broker-design.md"), "utf8").replace(/\s+/g, " ");
+  assert.ok(!design.includes("key-value bucket"), "design: decision 33 is a stream, not a key-value bucket (Kade's B)");
+  assert.ok(design.includes("expected subject sequence"), "design: two arms cannot both win, by expected subject sequence");
 });

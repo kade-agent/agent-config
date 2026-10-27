@@ -40,13 +40,13 @@ The client prints it as one entry of a summary line (see The lines below). Its f
 ## Arming the broker Monitor
 
 The watch is event-broker's `client/watch.js`, a Node 22+ program run from a clone of
-`kade-agent/event-broker` at a reviewed commit (`146133e4e1d4442c5d95a6767aa17e57edab0659`).
+`kade-agent/event-broker` at a reviewed commit (`6d26aa81b5e092b18b9fdc9d009d2d399148d52f`).
 Install it once per pin, on the PC:
 
 ```bash
 d="$HOME/.claude/dispatcher/event-broker"
 if [ -d "$d/.git" ]; then git -C "$d" fetch origin; else git clone https://github.com/kade-agent/event-broker "$d"; fi
-git -C "$d" checkout --detach 146133e4e1d4442c5d95a6767aa17e57edab0659
+git -C "$d" checkout --detach 6d26aa81b5e092b18b9fdc9d009d2d399148d52f
 npm ci --omit=dev --prefix "$d"
 ```
 
@@ -69,8 +69,11 @@ goes into a repository: this one and event-broker are public. The values live on
 The `Monitor` command:
 
 ```bash
-node "$HOME/.claude/dispatcher/event-broker/client/watch.js" --owner <org> --profile dispatcher
+node "$HOME/.claude/dispatcher/event-broker/client/watch.js" --owner <org> --profile dispatcher --session <this session's id>
 ```
+
+`<this session's id>` is this dispatcher session's own id (`get_session` with no id returns it). The
+watch holds the org's lease with it (design decision 33): one reader per org, across machines.
 
 ### The lines
 
@@ -102,6 +105,8 @@ Every stdout line is one of these:
   with no line (decision 28). The Monitor does not pass it: the 10-minute health probe still runs,
   and a dead broker still ends in `BROKER-DOWN`.
 - `BROKER-DOWN <why>`: just before the client exits. Twice in a row: the gh poll, as before.
+- `WATCH-REFUSED holder=<id>`: another session of the org holds the lease (renewed on each of its
+  arms, 35 minutes), so this watch reads nothing and exits 4.
 
 The client acks a message only after the summary holding it is written, so an event cannot be lost
 between the ack and the print. A watch that ends with a window open prints none of it; the next
@@ -116,6 +121,8 @@ watch gets those events.
   - 2, `BROKER-DOWN` for the settings (no URL, owner or key; a pidfile that cannot be written). The
     same settings fail the same way, so go to the gh poll and tell Kade the line.
   - 3, a failed write (the Monitor's output is gone). Nothing was acked; re-arm.
+  - 4, `WATCH-REFUSED`: another dispatcher of the org is live. Do not re-arm. Tell Kade the holder
+    and use the gh poll until he answers. Re-arm with `--take` only when Kade says the holder is gone.
 - **Resume.** `dispatcher` is a durable consumer, so the server remembers what was acked, and the
   next arm continues after it. There is no state file. A message pulled but not acked comes back
   after the 60 s ack wait with the same `delivery`. A message lost between GitHub and the broker is
@@ -144,7 +151,8 @@ watch gets those events.
 - **One dispatcher per org.** Each dispatcher reads its own org's account and its consumer
   `dispatcher`. Two dispatchers of the same org, local and cloud, still share that consumer, and
   JetStream splits its messages among every reader. So one dispatcher reads the consumer at a
-  time. A second dispatcher of the org uses the gh-poll fallback. Any test that reads the
+  time: the lease enforces it (a second one gets `WATCH-REFUSED`). A second dispatcher of the org
+  uses the gh-poll fallback. Any test that reads the
   consumer takes events away from the dispatcher.
 - **Profiles.** The consumer `dispatcher` of stream `EVENTS` carries one filter per signal of the
   profile (design section 9): the 9 signals of the table below arrive and nothing else. A reader
@@ -255,10 +263,10 @@ The cloud environment's settings:
 - **Network access:** allows `<nats host>`.
 - **Setup script:** installs the pinned client and nothing else:
   ```bash
-  git clone https://github.com/kade-agent/event-broker /root/event-broker && git -C /root/event-broker checkout --detach 146133e4e1d4442c5d95a6767aa17e57edab0659 && npm ci --omit=dev --prefix /root/event-broker
+  git clone https://github.com/kade-agent/event-broker /root/event-broker && git -C /root/event-broker checkout --detach 6d26aa81b5e092b18b9fdc9d009d2d399148d52f && npm ci --omit=dev --prefix /root/event-broker
   ```
 - **Monitor command:**
-  `node /root/event-broker/client/watch.js --owner <org> --profile dispatcher`.
+  `node /root/event-broker/client/watch.js --owner <org> --profile dispatcher --session <this session's id>`.
 
 A setup script cannot see the environment's variables, so it never writes the seed. Instead,
 `watch.js` writes the key file from `EVENT_BROKER_CLOUD_SEED` when it starts and the file is

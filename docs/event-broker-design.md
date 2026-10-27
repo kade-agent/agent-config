@@ -197,18 +197,21 @@ still woke for events it does not act on; fewer wakes and fewer writes.
     `red` state, so `red=` stays the real breakage. `main_info` is not in the `dispatcher` profile:
     it never wakes the dispatcher, and the `all` profile and `EVENTS` keep it. Receiver change;
     Kade redeploys and sets the list.
-33. **One reader per org, by lease (event-broker#32 point 6; Kade, 2026-10-27, "lease"):** two
-    sessions on the `dispatcher` consumer split its events between them, and the pidfile guards
-    one machine only. At start, `src/stream.js` creates in each owner's account a key-value bucket
-    `LEASE` (history 1, `max_age` 35 min: the 30-minute watch deadline and a margin). On arm, after
-    the stream check, the client takes the key `<profile>` with its `--session <id>` (the
-    dispatcher's own session id): it creates the key when it is absent or expired, and updates it
-    (renewing the 35 minutes) when it already holds its own id, both by revision so two arms cannot
-    both win. A live key holding another id ends the client with `WATCH-REFUSED holder=<id>` on
-    stdout and exit 4, before it reads anything. `--take` overwrites a live key: only on Kade's
-    word, when the holder is known to be gone. Without `--session` the client runs as today (no
-    lease), for the `all` profile and tests. The reader users get permission on `LEASE` only, in
-    `nats/nats-server.conf`. Receiver, NATS config and client; Kade redeploys.
+33. **One reader per org, by lease (event-broker#32 point 6; Kade, 2026-10-27, "lease", then "B":
+    a stream, no new dependency):** two sessions on the `dispatcher` consumer split its events
+    between them, and the pidfile guards one machine only. At start, `src/stream.js` creates in
+    each owner's account a stream `LEASE` (`lease.<owner>.>`, one message per subject, `max_age`
+    35 min: the 30-minute watch deadline and a margin). On arm, after the stream check, the client
+    reads `lease.<owner>.<profile>` and writes its `--session <id>` (the dispatcher's own session
+    id) there when the lease is absent, older than 35 minutes, or already its own (renewing it),
+    by expected subject sequence, so two arms cannot both win: the loser reads again. A live lease
+    holding another id ends the client with `WATCH-REFUSED holder=<id>` on stdout and exit 4,
+    before it reads anything. `--take` overwrites a live lease: only on Kade's word, when the
+    holder is known to be gone. Without `--session` the client runs as before (no lease), for the
+    `all` profile and tests. A reader may read `LEASE` and write only its own org's
+    `lease.<owner>.>`, in `nats/nats-server.conf`. The NATS KV API would have needed
+    `@nats-io/kv`; a KV store is this same mechanism over a stream. Receiver, NATS config and client;
+    Kade redeploys.
 
 Decision 6 changes with decision 11: LAN access needs a key now (section 7). Decision 7 stays, with
 one dispatcher per org.
@@ -461,7 +464,7 @@ There is no keyless LAN user: `no_auth_user` is removed, and a local dispatcher 
 | Ignore lines matched on the event's time (event-broker#32 point 4) | event-broker#33, agent-config#158 | merged 2026-10-27 |
 | Decision 31: `WATCH-ARMED` only with a backlog; silence means armed | event-broker#34, agent-config (this PR) | merged 2026-10-27 |
 | Decision 32: `main_info` and `MAIN_INFO_WORKFLOWS` | event-broker#35 (cbef5b5), agent-config (this PR); then Kade redeploys and sets the list | merged 2026-10-27 |
-| Decision 33: the `LEASE` bucket, `--session`, `WATCH-REFUSED` | event-broker (stream, NATS config, client), then Kade redeploys, then `pr-watch.md` | next |
+| Decision 33: the `LEASE` stream, `--session`, `WATCH-REFUSED` | event-broker#36 (6d26aa8), Kade's redeploy, agent-config (this PR) | merged 2026-10-27 |
 
 **Settled:**
 - The two runtime dependencies `@nats-io/transport-node` and `@nats-io/jetstream` (3.4.0, pinned)
