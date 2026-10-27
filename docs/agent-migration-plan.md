@@ -149,7 +149,8 @@ Each step is one PR, merged before the next.
    Decided 2026-10-16 (#48): no Antigravity hook yet; Claude's `global-sync` calls
    `hooks/agent-sync.cjs` on every run, which keeps the include and the copies. Antigravity's own
    hook waits for a test on the PC that shows one running.
-10. **`context-guard` for Antigravity** (`PreInvocation`, `injectSteps`), only if a transcript
+10. **Dropped (Kade, 2026-10-27): `context-guard` itself is removed, since Kade reads the context
+    size in the UI.** It was: **`context-guard` for Antigravity** (`PreInvocation`, `injectSteps`), only if a transcript
     holds token usage. The IDE's does not (step 3); the CLI's does, and a `PreInvocation` hook
     in a workspace's `.agents/hooks.json` runs there and can read it (2026-10-16), so step 10 is
     for the CLI only. Before it is built: a user-level hook file the CLI loads (the one
