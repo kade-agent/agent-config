@@ -40,12 +40,13 @@ The queue lives in each org's private repository `<owner>/tasks` (`kade-agent/ta
 3. List the tasks in two groups. Show non-blocked tasks first:
    - **Non-blocked**: needs no decision, task, merge or release from Kade, and no unmerged output of another task (no open `Blocked by:`).
    - **Blocked**: give the blocker for each (Kade's decision, his task, his merge, a release tag, task X).
-4. For each non-blocked task, start a plan-writing subagent (`Agent`) with the message in `references/plan-writer.md`, every slot filled. It reads the code and the decisions, writes the plan file (see 4. Dispatching), commits it to `<owner>/tasks` and returns the sha and a 10-line summary, so neither the plan's text nor the code it read enters your context (#143). Say whether the task can run beside the others (see 3. Concurrency).
+4. For each non-blocked task, start a plan-writing subagent (`Agent`) with the message in `references/plan-writer.md`, every slot filled. It reads the code and the decisions, writes the plan file (see 4. Dispatching), commits it to `<owner>/tasks` and returns the sha and a 10-line summary (or `SPLIT` with a split for Kade, see 2. Sizing), so neither the plan's text nor the code it read enters your context (#143). Say whether the task can run beside the others (see 3. Concurrency).
 5. Show Kade the plans as one batch: for each, its link at the full sha and its summary (Kade, 2026-10-26). Put the plans' Questions for Kade on cards (see 6. Decisions); a plan whose answer changes it is rewritten and approved at its new sha. Dispatch only after he approves the plans, as he changed them, at their plan shas. Record his approval on the queue issue in one comment: his words quoted, and each approved task ID with its plan sha. Cite that comment in each worker prompt. A plan edited after approval goes back to Kade; so does a step he did not approve.
 
 ## 2. Sizing a task
 
 - One task makes one PR. If a task needs more, split it into tasks.
+- A worker's context stays under ~200k: every call re-reads it, and two workers that grew to 320k cost $10.64 of a $53.62 run (#154). A task whose steps would take a worker past ~200k (a refactor across many files, long engine or performance test runs, many regenerations of generated files): split it at the plan stage into tasks of one PR each, in order. The plan writer proposes the split (`references/plan-writer.md`); there is no handover by the worker (Kade, 2026-10-27).
 - A worker commits each logical step on its own and pushes after each commit. Typical steps: the failing test, the change it drove, each area moved over, content, and generated files (schema, corpus, goldens, pinned hashes). Never one big commit.
 - A task that touches a path Kade merges by hand (ADRs, `AGENTS.md`/`CLAUDE.md`, `.claude/`, workflows) is a separate, small task whose PR is a draft for him.
 
