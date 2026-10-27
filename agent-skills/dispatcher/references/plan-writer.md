@@ -1,10 +1,10 @@
 # Plan-writer prompt
 
-The dispatcher starts one plan-writing subagent (`Agent`) per task (SKILL.md, 1. Start, step 4).
-Its message is the block below with every `<slot>` filled (`none` where one does not apply); the
-rules are in this file, which the subagent reads by path, so the message never restates them. Fill
-`<skill dir>` with the dispatcher's skill directory, the base directory this skill was loaded
-from: never a path copied from an earlier session.
+The dispatcher starts one plan-writing subagent (`Agent` with `model: "sonnet"`) per task (SKILL.md,
+1. Start, step 4). Its message is the block below with every `<slot>` filled (`none` where one does
+not apply); the rules are in this file, which the subagent reads by path, so the message never
+restates them. Fill `<skill dir>` with the dispatcher's skill directory, the base directory this
+skill was loaded from: never a path copied from an earlier session.
 
 ```text
 You write one task plan for Kade's dispatcher queue <owner>/tasks#<queue issue> and commit it; you build nothing.
