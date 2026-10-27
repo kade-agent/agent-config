@@ -171,6 +171,10 @@ still woke for events it does not act on; fewer wakes and fewer writes.
       closes a sub-issue, so its own close is not an `issue_closed` wake (decision 26 covered labels).
     - Sub-issue labels: only `status:blocked`. `planned`, `approved` and `running` are read from the
       plan's sha, the approval comment, the `dispatched` comment and the PR, so they cost no writes.
+      *Replaced by DS134 (Kade, 2026-10-27, stella-rain/tasks#137):* every open task carries exactly
+      one `status:` label (`pending`, `planned`, `approved`, `held`, `running`, `blocked`), so the
+      labels show the queue without reading comments; each one the dispatcher adds goes in the
+      ignore file. The profile is unchanged: `issue_labeled` already reaches the dispatcher.
     - Skill: no manual post-merge CI check (the `main_*` and `merge_*` signals carry it); the
       `git merge-tree` check runs when dispatching, not on every wake; the Monitor's re-arm is the
       check-in (a `send_later` only while no Monitor is armed); one nudge, then the replacement.
@@ -659,9 +663,11 @@ clone of event-broker at a pinned commit, after `npm ci --omit=dev`.
   stream sequence, in one process) is acked and not printed again. Across a restart delivery is
   at-least-once: a line written before a kill, with no ack, is printed again.
 - **Ignore file (decision 26):** after each label it sets, the dispatcher appends
-  `<ISO time> label <owner>/<repo>#<n> <label>` to `WATCH_IGNOREFILE`. Before each summary, the client
-  reads the file's lines from the last hour; an `issue_labeled` event matching one is acked, not
-  printed, and counted in the header. The file holds no comment text and stays outside any
+  `<ISO time> label <owner>/<repo>#<n> <label>` to `WATCH_IGNOREFILE` (and `close <owner>/<repo>#<n>`,
+  decision 30). Before each summary, the client reads the file; an `issue_labeled` or `issue_closed`
+  event matching a line is acked, not printed, and counted in the header when the event's own time
+  (its stream timestamp) is from 60 s before the line to 1 h after it, however late it is read
+  (event-broker#33, 2026-10-27; before, a line counted only while under an hour old at read time). The file holds no comment text and stays outside any
   repository; it is per org, beside the pidfile. A missing or unreadable file drops nothing.
 - **Heartbeat:** with `--alive` only (decision 28): `WATCH-ALIVE <owner> consumer=<profile>
   unprocessed=<n>` after 600 s with no line printed.

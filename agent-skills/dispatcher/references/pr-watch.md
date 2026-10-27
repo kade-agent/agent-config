@@ -38,13 +38,13 @@ The client prints it as one entry of a summary line (see The lines below). Its f
 ## Arming the broker Monitor
 
 The watch is event-broker's `client/watch.js`, a Node 22+ program run from a clone of
-`kade-agent/event-broker` at a reviewed commit (`cb4705813614141a446295fa0da04f5882efb37b`).
+`kade-agent/event-broker` at a reviewed commit (`921c8a773989f5f45887a9d99ad7edaf5b5492cd`).
 Install it once per pin, on the PC:
 
 ```bash
 d="$HOME/.claude/dispatcher/event-broker"
 if [ -d "$d/.git" ]; then git -C "$d" fetch origin; else git clone https://github.com/kade-agent/event-broker "$d"; fi
-git -C "$d" checkout --detach cb4705813614141a446295fa0da04f5882efb37b
+git -C "$d" checkout --detach 921c8a773989f5f45887a9d99ad7edaf5b5492cd
 npm ci --omit=dev --prefix "$d"
 ```
 
@@ -197,9 +197,12 @@ echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) close <owner>/<repo>#<n>" >> ~/.claude/disp
 ```
 
 The format is `<ISO time> label <owner>/<repo>#<n> <label>`, or `<ISO time> close <owner>/<repo>#<n>`
-(decision 30). The client acks the matching `issue_labeled` or `issue_closed` of the next hour without
-printing it, so it is not a wake. The file holds no
-comment text and stays outside any repository. A label or close someone else made still arrives.
+(decision 30). The client acks a matching `issue_labeled` or `issue_closed` without printing it, so it
+is not a wake, when the event happened from 60 s before the line to 1 h after it, by the event's own
+time (its stream timestamp; event-broker#33), however late the watch reads it. So the line may come
+right after the API call (the label set when an issue is created has no number before it), and the
+echoes queued while no watch ran are dropped too. The file holds no comment text and stays outside
+any repository. A label or close someone else made still arrives.
 
 ## Acting on an event
 
@@ -250,7 +253,7 @@ The cloud environment's settings:
 - **Network access:** allows `<nats host>`.
 - **Setup script:** installs the pinned client and nothing else:
   ```bash
-  git clone https://github.com/kade-agent/event-broker /root/event-broker && git -C /root/event-broker checkout --detach cb4705813614141a446295fa0da04f5882efb37b && npm ci --omit=dev --prefix /root/event-broker
+  git clone https://github.com/kade-agent/event-broker /root/event-broker && git -C /root/event-broker checkout --detach 921c8a773989f5f45887a9d99ad7edaf5b5492cd && npm ci --omit=dev --prefix /root/event-broker
   ```
 - **Monitor command:**
   `node /root/event-broker/client/watch.js --owner <org> --profile dispatcher`.
