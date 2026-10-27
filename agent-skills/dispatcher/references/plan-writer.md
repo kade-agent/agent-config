@@ -1,7 +1,7 @@
 # Plan-writer prompt
 
 The dispatcher starts one plan-writing subagent (`Agent` with `model: "sonnet"`) per task (SKILL.md,
-1. Start, step 4). Its message is the block below with every `<slot>` filled (`none` where one does
+1. Start, step 5). Its message is the block below with every `<slot>` filled (`none` where one does
 not apply); the rules are in this file, which the subagent reads by path, so the message never
 restates them. Fill `<skill dir>` with the dispatcher's skill directory, the base directory this
 skill was loaded from: never a path copied from an earlier session.
@@ -13,7 +13,7 @@ First read <skill dir>/references/plan-writer.md and follow its rules; these slo
 - Task: <task id> (sub-issue <owner>/tasks#<n>): <goal in one sentence>.
 - Plan path: plans/<lane>/<task>.md in the clone <path of the <owner>/tasks clone>.
 - Precedent plans: <plans/... it mirrors, and why, or none>
-- Clones: <path: repository, for each clone it reads; fetch origin main first>
+- Clones: <the repository the task changes, to shallow-clone into your scratchpad; any other it reads>
 - Inputs: <the sub-issue, PRs, decisions (comment IDs), ADRs, rules files to read>
 - Must cover: <each item the plan's steps must hold>
 - Files owned: <what the worker may touch>
@@ -26,8 +26,10 @@ First read <skill dir>/references/plan-writer.md and follow its rules; these slo
 
 1. **You build nothing.** The clones of the product repositories are read-only: read, fetch and
    run read-only commands there, never edit, commit or push. Only the plan file is written.
-2. **Read first:** the global rules, the task repository's `AGENTS.md`/`CLAUDE.md` (its Gates table
-   and its `.claude/rules/` for the paths the task touches), and every item in `Inputs:`. Load the
+2. **Read first:** shallow-clone each repository in `Clones:` into your scratchpad
+   (`git clone --depth 1`); the dispatcher holds none. Then read the global rules, the task
+   repository's `AGENTS.md`/`CLAUDE.md` (its Gates table and its `.claude/rules/` for the paths the
+   task touches: a manual clone does not load them), and every item in `Inputs:`. Load the
    GitHub tools you need with `ToolSearch` (`select:mcp__github__issue_read,mcp__github__pull_request_read,mcp__github__get_file_contents`)
    where there is no `gh`.
 3. **The plan:** copy `<skill dir>/references/plan-template.md`, fill every slot, and mirror the
