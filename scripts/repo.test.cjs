@@ -561,3 +561,30 @@ test("the worker's hard rules live in the task-worker skill; the dispatcher's me
   assert.ok(block.split("\n").length <= 20, "the message is at most 20 lines");
   assert.match(block.trim().split("\n").pop(), /^TASK .*Plan: <plan path> at <full plan sha>/, "the plan is the message's last line");
 });
+
+// Kade (2026-10-27): the plan-writing subagent's message restated the same rules every time, guessed
+// where plans are pushed, and named a synced, hashed template path. The fixed rules live in
+// references/plan-writer.md, read by path; plans go straight to `<owner>/tasks` main (Kade's
+// exception to "never commit to main"); a plan may hold at most 2 questions for Kade.
+test("the plan-writing subagent reads references/plan-writer.md; its message holds only slots", () => {
+  const dir = path.join(ROOT, "agent-skills", "dispatcher");
+  const file = path.join(dir, "references", "plan-writer.md");
+  assert.ok(fs.existsSync(file), "references/plan-writer.md exists");
+  const text = fs.readFileSync(file, "utf8");
+  for (const p of ["you build nothing", "straight to `main`", "never commit to main", "Co-Authored-By: <Claude model name> <noreply@anthropic.com>",
+    "Questions for Kade", "at most 2", "(Recommended)", "long-term", "10 lines", "read-only", "skill directory"]) {
+    assert.ok(text.includes(p), `plan-writer.md says: ${p}`);
+  }
+  const block = /```text\n([^]*?)\n```/.exec(text)[1];
+  assert.ok(block.includes("references/plan-writer.md"), "the message tells the subagent to read plan-writer.md");
+  for (const slot of ["Task:", "Plan path:", "Precedent plans:", "Clones:", "Inputs:", "Must cover:", "Files owned:",
+    "Must not touch:", "Investigate:", "Questions allowed:"]) {
+    assert.ok(block.includes(slot), `the message has the slot ${slot}`);
+  }
+  assert.ok(block.split("\n").length <= 20, "the message is at most 20 lines");
+  const skill = fs.readFileSync(path.join(dir, "SKILL.md"), "utf8").replace(/\s+/g, " ");
+  assert.ok(skill.includes("references/plan-writer.md"), "SKILL.md names references/plan-writer.md");
+  assert.ok(skill.includes("Questions for Kade"), "SKILL.md shows Kade the plans' questions");
+  const template = fs.readFileSync(path.join(dir, "references", "plan-template.md"), "utf8");
+  assert.ok(template.includes("## Questions for Kade"), "plan-template.md has an optional Questions for Kade section");
+});

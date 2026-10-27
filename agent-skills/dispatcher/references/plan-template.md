@@ -53,4 +53,9 @@ One commit each, pushed after each:
 ## Follow-ups
 
 - <What the PR body's "Follow-ups" section must list: ADR departures, placeholders taken, NOT VERIFIED, open questions. A merge is the DONE (decision 29): no DONE line.>
+
+## Questions for Kade
+
+<Optional; delete the section when there are none. At most 2, each a choice that is his: options
+A/B(/C) with their trade-offs, one marked "(Recommended)" with a one-line reason.>
 ```
