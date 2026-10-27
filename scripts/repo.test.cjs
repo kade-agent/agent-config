@@ -136,17 +136,17 @@ test("workflows grant nothing at the top and keep no credentials after checkout"
   }
 });
 
-// Plan step 5: context-guard runs from ~/.claude/hooks for every repository, so settings.global.json
-// must register it, and every command must point there (global-sync owns what does).
-test("settings.global.json registers global-sync and context-guard from $HOME/.claude/hooks", () => {
+// Every command must point into ~/.claude/hooks (global-sync owns what does). context-guard is gone
+// (Kade, 2026-10-27: he reads the context size in the UI), so global-sync is the only hook.
+test("settings.global.json registers only global-sync, from $HOME/.claude/hooks", () => {
   const fragment = JSON.parse(fs.readFileSync(path.join(ROOT, "settings.global.json"), "utf8"));
   const commands = (event, matcher) =>
     (fragment.hooks[event] || [])
       .filter((g) => g.matcher === matcher)
       .flatMap((g) => g.hooks.map((h) => h.command));
   assert.deepStrictEqual(commands("SessionStart", "startup"), ['node "$HOME/.claude/hooks/global-sync.cjs"']);
-  assert.deepStrictEqual(commands("SessionStart", "compact"), ['node "$HOME/.claude/hooks/context-guard.cjs"']);
-  assert.deepStrictEqual(commands("UserPromptSubmit", undefined), ['node "$HOME/.claude/hooks/context-guard.cjs"']);
+  assert.deepStrictEqual(Object.keys(fragment.hooks), ["SessionStart"]);
+  assert.deepStrictEqual(fragment.hooks.SessionStart.map((g) => g.matcher), ["startup"]);
   for (const groups of Object.values(fragment.hooks)) {
     for (const h of groups.flatMap((g) => g.hooks)) {
       assert.match(h.command, /\$HOME\/\.claude\/hooks\//, `${h.command}: must point into ~/.claude/hooks`);
