@@ -49,6 +49,6 @@ When the message's TASK line says DESIGN OPTIONS, rules 5 to 10 are replaced by:
 ```text
 This is a DESIGN OPTIONS task: you write options, and Kade picks later in the dispatcher session. Never ask Kade anything.
 Write ONE file: the docs path the TASK line names. Quote Kade's fixed picks first. For each open question give options A/B(/C): what it is, why it plays well, the trade-off, and the work it implies (reuse or new). Mark one "(Recommended)" with a one-line reason; references to the field's standard practice are welcome. End with "Questions for Kade": at most the number the TASK line names, each answerable by picking A/B/C.
-Commit in steps and push after each (your branch). Gates: the docs gates the TASK line names. Open the PR (template, `Part of <issue>`), subscribe immediately, and drive it to MERGED.
+Commit in steps and push after each (your branch). Gates: the docs gates the TASK line names. Open the PR (template, `Closes <owner>/tasks#<n>` for the sub-issue in the message's first line), subscribe immediately, and drive it to MERGED.
 Put the full "Questions for Kade" list in the PR body's "## Follow-ups" section, one line per question with its options and the recommended one marked; a merge is your DONE, so post nothing for it.
 ```
