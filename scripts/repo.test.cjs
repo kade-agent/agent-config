@@ -603,3 +603,21 @@ test("workers stay under ~200k: split at the plan stage, logs kept out of contex
   assert.ok(worker.includes("echo exit=$?; tail -50 <log>"), "task-worker: build and test output is cut, the exit code kept");
   assert.ok(worker.includes("never read a whole log"), "task-worker: no full log in the session");
 });
+
+// agent-config#154 changes 2, 4, 5 and 8 (Kade, 2026-10-27; the size-based handoff, 1a, is dropped):
+// the dispatcher spent $33.25 of $53.62, mostly by re-reading a context grown by raw get_session
+// JSON, whole PR bodies and long reports. Plan writers run on Sonnet, a Haiku helper reads sessions
+// and PRs and returns lines, and reports are batched and short.
+test("the dispatcher keeps its context small: Sonnet plan writers, a Haiku helper, batched reports", () => {
+  const norm = (...p) => fs.readFileSync(path.join(ROOT, "agent-skills", "dispatcher", ...p), "utf8").replace(/\s+/g, " ");
+  const skill = norm("SKILL.md");
+  assert.ok(skill.includes('`model: "sonnet"`'), "SKILL.md 1. Start: plan writers run on Sonnet");
+  assert.ok(norm("references", "plan-writer.md").includes('`model: "sonnet"`'), "plan-writer.md: started on Sonnet");
+  assert.ok(skill.includes('`model: "haiku"`'), "SKILL.md: a Haiku helper reads sessions and PRs");
+  assert.ok(skill.includes("one line per task"), "SKILL.md: the check-in helper returns one line per task");
+  assert.ok(skill.includes("only its Follow-ups and NOT VERIFIED"), "SKILL.md: a merged PR's body is not read whole");
+  assert.ok(skill.includes("never raw `get_session` JSON"), "SKILL.md: no raw get_session in the dispatcher's context");
+  assert.ok(skill.includes("waits for the next report that needs Kade"), "SKILL.md 7. Reporting: merge reports are batched");
+  assert.ok(skill.includes("its link, never its summary restated"), "SKILL.md 7. Reporting: a plan is linked");
+  assert.ok(norm("references", "pr-watch.md").includes("the check-in helper"), "pr-watch.md: the re-arm sweep goes through the helper");
+});
