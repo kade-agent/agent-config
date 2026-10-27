@@ -132,7 +132,7 @@ When a task's PR merges, dispatch whatever it unblocked.
 
 ## 8. Stopping
 
-When Kade says stop, or the context nears its limit (`handoff-trigger`):
+When Kade says stop or asks for a handoff:
 1. Dispatch nothing new.
 2. Comment on the queue issue with:
    - what merged;

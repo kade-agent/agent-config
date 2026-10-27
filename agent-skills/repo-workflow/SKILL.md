@@ -9,8 +9,7 @@ The repository's `AGENTS.md` (or `CLAUDE.md` where not yet migrated) says **what
 its parts, gates, branches and where state lives. This skill says **how** to work in any of them,
 whichever agent you are. The standing rules (plan first, test first, gates, commit style) are the
 global rules in `~/.claude/AGENTS.md` (`~/.claude/CLAUDE.md` until it moves); this skill holds the
-procedures behind them. When to recommend a handoff from the context size is the
-`handoff-trigger` skill.
+procedures behind them.
 
 ## 1. Plan before editing
 

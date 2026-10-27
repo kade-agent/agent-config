@@ -10,27 +10,6 @@
             "timeout": 30
           }
         ]
-      },
-      {
-        "matcher": "compact",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node \"$HOME/.claude/hooks/context-guard.cjs\"",
-            "timeout": 5
-          }
-        ]
-      }
-    ],
-    "UserPromptSubmit": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node \"$HOME/.claude/hooks/context-guard.cjs\"",
-            "timeout": 5
-          }
-        ]
       }
     ]
   }
