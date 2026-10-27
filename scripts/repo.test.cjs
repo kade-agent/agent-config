@@ -669,3 +669,14 @@ test("pr-watch.md: silence means armed (decision 31)", () => {
   assert.ok(watch.includes("only when `unprocessed` is above 0"), "pr-watch.md: WATCH-ARMED reaches the session only with a backlog");
   assert.ok(!watch.includes("within 30 s"), "pr-watch.md: no 30 s wait for WATCH-ARMED");
 });
+
+// Decision 32 (Kade, 2026-10-27; event-broker#35): a run on main of a workflow listed in the receiver's
+// MAIN_INFO_WORKFLOWS is main_info, never main_failed or red, and the dispatcher profile leaves it out.
+test("main_info: the signal table, the dispatcher's leave-out list and pr-watch.md (decision 32)", () => {
+  const design = fs.readFileSync(path.join(ROOT, "docs", "event-broker-design.md"), "utf8").replace(/\s+/g, " ");
+  assert.ok(design.includes("That is 40 signals."), "design: 40 signals with main_info");
+  assert.match(design, /\| `workflow_run` \| no PR, on main, a workflow in `MAIN_INFO_WORKFLOWS` \| `main_info` \|/, "design: a signal table row for main_info");
+  assert.ok(design.includes("`main_still_passed`, `main_info`,"), "design: the dispatcher profile leaves out main_info");
+  const watch = fs.readFileSync(path.join(ROOT, "agent-skills", "dispatcher", "references", "pr-watch.md"), "utf8").replace(/\s+/g, " ");
+  assert.ok(watch.includes("`MAIN_INFO_WORKFLOWS`") && watch.includes("`main_info`"), "pr-watch.md: a listed workflow never arrives as main_failed");
+});
