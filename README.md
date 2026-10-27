@@ -9,7 +9,6 @@ the skills moved in from `kade-agent/claude-skills` with their history (step 4).
 |---|---|---|
 | `AGENTS.md` | The global rules, deployed as `~/.claude/AGENTS.md`; line 1 is the release | Released by the Candidate and Promote workflows |
 | `CLAUDE.md` | The one line `@AGENTS.md`: Claude Code loads `~/.claude/CLAUDE.md` in every session, and it imports the rules | Deployed with them |
-| `hooks/context-guard.cjs` | Shows the context number at 300k tokens, recommends (never forces) a handoff at 400k (never later than 40% / 60% of the window), and after a compaction | User-level `UserPromptSubmit` and `SessionStart` (compact) hooks, registered from `settings.global.json`; repositories no longer vendor a copy |
 | `hooks/global-sync.cjs` | Keeps `~/.claude` on the latest release tag; prints the new rules into the session that moved; then runs `agent-sync` | User-level `SessionStart` hook, registered from `settings.global.json` |
 | `hooks/agent-sync.cjs` | Keeps the other agents' copies: the one-line rules include and the skills, for each agent in `agents.json` whose folder exists; touches nothing it did not write | Called by `global-sync` on every run; no hook of its own |
 | `agents.json` | Antigravity: the rules include `~/.gemini/AGENTS.md`, the skills folders `~/.gemini/config/skills/` (IDE, app) and `~/.gemini/antigravity-cli/skills/` (CLI) | Read by `agent-sync` |
