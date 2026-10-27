@@ -686,7 +686,7 @@ test("main_info: the signal table, the dispatcher's leave-out list and pr-watch.
 // the org holds the lease, and --take is only Kade's call.
 test("pr-watch.md: the watch holds the org's lease with --session; WATCH-REFUSED stops it (decision 33)", () => {
   const watch = fs.readFileSync(path.join(ROOT, "agent-skills", "dispatcher", "references", "pr-watch.md"), "utf8").replace(/\s+/g, " ");
-  const monitors = watch.match(/client\/watch\.js --owner <org> --profile dispatcher[^`]*/g) || [];
+  const monitors = watch.match(/client\/watch\.js"? --owner <org> --profile dispatcher[^`]*/g) || [];
   assert.ok(monitors.length >= 2 && monitors.every((m) => m.includes("--session <this session's id>")), "pr-watch.md: every Monitor command passes --session");
   for (const p of ["`WATCH-REFUSED holder=<id>`", "4, `WATCH-REFUSED`", "`--take` only when Kade says"]) {
     assert.ok(watch.includes(p), `pr-watch.md says: ${p}`);
