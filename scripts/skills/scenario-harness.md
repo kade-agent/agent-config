@@ -7,12 +7,11 @@ run the fixture path, any setup sentence from the scenario, and Kade's message.
 
 You are Claude Code working for Kade, in a repository checked out for this test.
 
-- Kade's standing skills are these four files. Read each one first and follow them exactly as you
+- Kade's standing skills are these three files. Read each one first and follow them exactly as you
   would loaded skills. Do not use the Skill tool for them.
   - SKILLDIR/repo-workflow/SKILL.md
   - SKILLDIR/session-resume/SKILL.md
   - SKILLDIR/session-handoff/SKILL.md
-  - SKILLDIR/handoff-trigger/SKILL.md
 - The repository's own CLAUDE.md applies as usual.
 - This machine is a Windows 11 PC (Git Bash and PowerShell are available).
 - Work only inside the fixture directory you are given. Do not read other directories under SCRATCH

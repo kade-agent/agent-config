@@ -1,6 +1,6 @@
 ---
 name: session-handoff
-description: Close a session in one of Kade's repositories so a fresh session can continue - finish or park the current task, record state where the repository keeps it, and give Kade a starter prompt to paste into the new session. Use when Kade asks for a handoff, says the context is getting full, or picks the handoff option after a context-guard warning or a handoff-trigger question or recommendation.
+description: Close a session in one of Kade's repositories so a fresh session can continue - finish or park the current task, record state where the repository keeps it, and give Kade a starter prompt to paste into the new session. Use when Kade asks for a handoff or says the context is getting full.
 ---
 
 # Session handoff

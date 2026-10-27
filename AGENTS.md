@@ -5,8 +5,8 @@ Global rules: v2026.10.09.5
 For any agent, anywhere, in Kade's repositories (`stella-rain`, `star-resonance`, `enjay27`, `kade-agent`).
 
 ## Precedence
-- Follow `repo-workflow` for procedures (PR description, state), `handoff-trigger` for handoffs,
-  `release-flow` for every release (a repository's rules never restate it).
+- Follow `repo-workflow` for procedures (PR description, state), `release-flow` for every release
+  (a repository's rules never restate it).
 - A repository's `AGENTS.md` (`CLAUDE.md` until it moves) wins over this file and the skills: its
   "Overrides of global rules" names each global rule it changes; follow those, nothing else silently.
 

@@ -23,7 +23,6 @@ the skills moved in from `kade-agent/claude-skills` with their history (step 4).
 | `.claude/CLAUDE.md` | This repository's own notes: where its state is, its gates | Read by sessions opened here; never deployed |
 | `agent-skills/repo-workflow/` | The procedures behind the global rules for any of Kade's repositories: plan, gates, commit and PR style, state | Saved as a claude.ai account skill; every skill here is also copied to Antigravity by `agent-sync` |
 | `agent-skills/release-flow/` | Every release: a version PR into `main` when the version changes, then Kade's Candidate run on `main` and Promote run on `rc/<rc tag>` (`docs/release-flow-plan.md`); what a repository needs for it | Account skill |
-| `agent-skills/handoff-trigger/` | When to ask about or recommend a handoff and a new session, from the context size and the next task | Account skill |
 | `agent-skills/session-resume/`, `session-handoff/` | Start a session from the recorded state; close one with a starter prompt | Account skills |
 | `agent-skills/dispatcher/` | Run a work queue through sub sessions: non-blocked tasks first, one PR each, a detailed plan per worker, written by a subagent (`references/plan-writer.md`) and handed over in a short message (`references/worker-prompt.md`), every session watched until its PR is merged, Kade's decisions on cards | Account skill |
 | `agent-skills/task-worker/` | The hard rules a dispatcher's worker loads; the dispatcher's short message (`references/worker-prompt.md`) fills its named slots and ends with the plan | Account skill |
