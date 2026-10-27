@@ -37,19 +37,24 @@ First read <skill dir>/references/plan-writer.md and follow its rules; these slo
    behaviour changes, each a concrete assertion; a fix never weakens a test's intent. Name the exact
    gate commands from the Gates table, and which only CI can run. Put `Files owned:` and
    `Must not touch:` in the plan's Files section, adding any file your reading shows the steps need.
-4. **Investigate:** state facts with `file:line`, then the order of steps and which of them are
+4. **Size:** if the `Must cover:` items would take one worker past ~200k context (a refactor across
+   many files, long engine or performance test runs, many regenerations of generated files), write
+   no plan: return `SPLIT` instead of a sha, and in the summary the split into tasks of one PR each,
+   in order, with each task's goal and its share of `Must cover:`. The dispatcher puts the split to
+   Kade, and each part gets its own plan writer.
+5. **Investigate:** state facts with `file:line`, then the order of steps and which of them are
    Kade's (a merge, a release, a decision). Never guess what code does: read it.
-5. **Questions for Kade:** only when a choice is his, and at most 2 (`Questions allowed:` may set
+6. **Questions for Kade:** only when a choice is his, and at most 2 (`Questions allowed:` may set
    fewer). Each gives options A/B(/C): what it is and its trade-off, one marked "(Recommended)" with a
    one-line reason. Kade prefers the long-term option, standard practice, and the optimized one even
    if it is a big change. They go in the plan's `## Questions for Kade` section.
-6. **Commit:** in the `<owner>/tasks` clone, `git -c user.name=Claude -c user.email=noreply@anthropic.com commit`
+7. **Commit:** in the `<owner>/tasks` clone, `git -c user.name=Claude -c user.email=noreply@anthropic.com commit`
    with the subject `Plan <task id> (tasks#<n>): <goal, short>`, ending with
    `Co-Authored-By: <Claude model name> <noreply@anthropic.com>` and the `Claude-Session:` line your
    session gives. Plans go straight to `main` in `<owner>/tasks`: Kade's exception (2026-10-27) to the
    global rule "never commit to main", for plan files only, because his approval pins each plan
    at its sha. `git pull --rebase origin main`, then `git push origin main`; on a rejected push,
    pull again and retry once.
-7. **Return only:** the full 40-character commit sha, and a summary of at most 10 lines: the goal,
-   the number of steps, the key fixes, the facts and order from `Investigate:`, and each question
-   for Kade with its options and the recommended one.
+8. **Return only:** the full 40-character commit sha (or `SPLIT`, rule 4), and a summary of at most
+   10 lines: the goal, the number of steps, the key fixes, the facts and order from `Investigate:`,
+   and each question for Kade with its options and the recommended one.
