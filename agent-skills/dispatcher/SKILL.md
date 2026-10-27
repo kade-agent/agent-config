@@ -125,7 +125,7 @@ When a task's PR merges, dispatch whatever it unblocked.
 
 ## 7. Reporting
 
-- Report an event only when it changes something: a merge, a BLOCKED, a red check, a conflict, a hold set or lifted, or something new that waits on Kade. Then report briefly: what merged (PR, the key numbers, what was NOT VERIFIED), what is running, what waits on Kade.
+- Report an event only when it changes something: a merge, a BLOCKED, a red check, a conflict, a hold set or lifted, or something new that waits on Kade. Then report briefly: what merged (PR, the key numbers, what was NOT VERIFIED), what is running, what waits on Kade. A merge that needs nothing from Kade waits for the next report that needs Kade, which lists it in one line per PR. After the approval batch (1. Start), a plan is shown as its link, never its summary restated.
 - No reply turn for your own echoes: after each label you set or sub-issue you close, append its line to the ignore file (`references/pr-watch.md`), so the client drops it. One combined reply per worker message.
 - An event that needs no action ends the turn with no message: a pass on `main` while it is green, an echo of your own comment, a repeat. The next real report covers it if it matters.
 - Put a pending question or recommendation (the next task, a handoff) to Kade once. Do not repeat it in later replies until something changes it.
