@@ -119,7 +119,8 @@ watch gets those events.
   caught by the gh sweep below.
 - **Re-arm.** A Monitor lasts at most 30 minutes. Re-arm about every 25 minutes, and at once when
   it ends or prints `BROKER-DOWN`. On every re-arm, sweep the open PRs in your table, to catch
-  anything the broker never received: GitHub does not retry a failed delivery. Start with each
+  anything the broker never received: GitHub does not retry a failed delivery. Leave it to
+  the check-in helper (SKILL.md, 5. Watching), which returns one line per task. It starts with each
   repository's snapshot (design decision 21), which prints its `red` list and, per PR, the state,
   head sha, mergeable state, the checks on the head, the last review and the last comment's author:
 
