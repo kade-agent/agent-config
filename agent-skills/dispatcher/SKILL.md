@@ -70,7 +70,7 @@ First look for the task's worker: the `dispatched <task id>: <session id>` comme
 
 Then comment `dispatched <task id>: <session id>` on the sub-issue (a replacement worker gets a new comment; none is edited).
 
-The prompt is `references/worker-prompt.md` with every slot filled: the sub-issue, and the plan file's path at its approved full sha. The worker reads the plan itself; never paste it (#142). Never re-read a plan to dispatch it: only check that `main` has not moved on in its files since the plan's `Base:` commit (`git log <base>..origin/main -- <files>` in the task's repository). The plan file is a detailed plan the worker follows without needing suggestions:
+The prompt is `references/worker-prompt.md` with every slot filled: the sub-issue, the named slots, and last the plan file's path at its approved full sha. The hard rules are the `task-worker` skill, which the worker loads: never restate or edit them in the prompt, and put each task fact in its slot. The worker reads the plan itself; never paste it (#142). Never re-read a plan to dispatch it: only check that `main` has not moved on in its files since the plan's `Base:` commit (`git log <base>..origin/main -- <files>` in the task's repository). A move the plan waits for (the merge of the task it was blocked by) goes in the `Known moves since Base:` slot; any other move sends the plan back. The plan file is a detailed plan the worker follows without needing suggestions:
 - The goal in one sentence, and the decision references (issue comment IDs, ADR numbers).
 - Exact values and numbers, and how they are stored (units and scales).
 - The files the worker may touch, and the files it must not touch because another worker owns them.
