@@ -640,3 +640,23 @@ test("the queue shape of DS134: epics only, label searches, one comment per merg
   assert.ok(watch.includes("60 s before the line to 1 h after it"), "pr-watch.md: the span of an ignore line");
   assert.ok(!watch.includes("of the next hour"), "pr-watch.md: no read-time hour");
 });
+
+// agent-config#154 changes 1b and 10 (Kade, 2026-10-27; stella-rain/tasks' AGENTS.md "Dispatcher
+// session"): a dispatcher started near 120k context with every org repository attached, each loading
+// its AGENTS.md and rules into every call. It attaches only <owner>/tasks; plan writers, helpers and
+// workers clone what they need into their own context.
+test("the dispatcher attaches only <owner>/tasks; plan writers, helpers and workers clone what they need", () => {
+  const norm = (...p) => fs.readFileSync(path.join(ROOT, "agent-skills", ...p), "utf8").replace(/\s+/g, " ");
+  const skill = norm("dispatcher", "SKILL.md");
+  for (const p of ["Attach only `<owner>/tasks`", "`list_commits`", "clones the task's repository into its own scratchpad"]) {
+    assert.ok(skill.includes(p), `SKILL.md says: ${p}`);
+  }
+  assert.ok(!skill.includes("`git log <base>..origin/main -- <files>`"), "SKILL.md: no git log in a clone the dispatcher no longer has");
+  const writer = norm("dispatcher", "references", "plan-writer.md");
+  assert.ok(writer.includes("shallow-clone"), "plan-writer.md: the plan writer clones its repository");
+  assert.ok(writer.includes("a manual clone does not load them"), "plan-writer.md: it reads AGENTS.md and the rules itself");
+  const prompt = norm("dispatcher", "references", "worker-prompt.md");
+  assert.ok(prompt.includes("- Sibling clones:"), "worker-prompt.md: the Sibling clones slot");
+  const worker = norm("task-worker", "SKILL.md");
+  assert.ok(worker.includes("`Sibling clones:`"), "task-worker reads the Sibling clones slot");
+});

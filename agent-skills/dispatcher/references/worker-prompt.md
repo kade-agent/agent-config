@@ -17,6 +17,7 @@ First load the skill `task-worker` (Version: <its version line>) and follow its 
 - Other running workers: <who and their areas, or none>
 - Generated files: <each with its regenerate command>
 - Known moves since Base: <merges in the plan's files since its Base: that the dispatcher checked and the plan waits for, or none>
+- Sibling clones: <a repository the gate needs beside this one, to clone next to it (for example `<owner>/.github` for `../.github/scripts/claude_md_check.py`), or none>
 
 TASK <task id> — <goal in one sentence>. Plan: <plan path> at <full plan sha>, in <owner>/tasks. Branch <claude/<task>, the session's outcome_branch> from up-to-date main<, or: continue <branch> at <sha>; first review what it holds>.
 ```

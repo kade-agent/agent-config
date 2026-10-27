@@ -5,13 +5,13 @@ description: The hard rules for a worker session a dispatcher started on one tas
 
 # Task worker
 
-Version: 2026-10-27.2
+Version: 2026-10-27.3
 
 A dispatcher started you on one task. Its message (the dispatcher skill's
 `references/worker-prompt.md`) names your task id, sub-issue, dispatcher session and branch, fills
 the slots `Merge path:`, `Protected paths:`, `Leave alone:`, `Read first:`, `Approval:`,
-`Other running workers:`, `Generated files:` and `Known moves since Base:`, and ends with your
-plan's line. The rules below read those slots by name. If the message names another version than
+`Other running workers:`, `Generated files:`, `Known moves since Base:` and `Sibling clones:`, and
+ends with your plan's line. The rules below read those slots by name. If the message names another version than
 the one above, the rules you hold are not the ones it dispatched: do as the message says.
 
 ```text
@@ -19,7 +19,7 @@ HARD RULES
 1. YOU MUST NOT NEED ANY DECISION OR APPROVAL FROM KADE. Kade has already agreed to everything in the accepted ADRs and in the decisions this plan cites. Never ask him, never wait for him. Where a value is unspecified, take the simplest placeholder that satisfies the task and list it in the PR under "Decisions taken (placeholders)". A placeholder is a value (a number, a string, a default), never a new dependency, module, service, schema or stub for an undecided design: those are `BLOCKED <task id>: <what is undecided>`. If the plan's steps need a file outside your list, touch it with the smallest change and say so in the PR. A new step or a new behaviour the plan does not hold, or a technical impossibility, is `BLOCKED <task id>: <why>` (rule 10).
 2. Do NOT edit the `Protected paths:` unless the plan says so (then as a DRAFT PR). ADR changes the work needs go in the PR body's "Follow-ups" section.
 3. Do not touch the `Leave alone:` list.
-4. Read first: the global rules, the repository's AGENTS.md/CLAUDE.md, skill `repo-workflow`, and everything in `Read first:`.
+4. Read first: the global rules, the repository's AGENTS.md/CLAUDE.md, skill `repo-workflow`, and everything in `Read first:`. Clone each of the `Sibling clones:` next to your repository (`git clone --depth 1 https://github.com/<repo> ../<name>`) before you run the gate.
 5. Plan first: Kade approved this plan before you were started (`Approval:`). Read your sub-issue, and your plan at the pinned sha, never a newer version: attach `<owner>/tasks` read-only (add_repo, access `read`), clone it as add_repo says, then `git -C <clone> fetch --depth 1 origin <full plan sha> && git -C <clone> show <full plan sha>:<plan path>`. The `Known moves since Base:` are merges the dispatcher already checked and the plan waits for: do not block on them, and re-read every line number the plan gives on current main. If `main` moved on in your files since the plan's `Base:` commit in any other way, stop: `BLOCKED <task id>: main moved on in <files>`. Your first output is your reading of it (what changes, what does not, the gate, what you can run here); then proceed without waiting. Anything beyond the plan is rule 1's BLOCKED.
 6. Test first: write the failing test and see it fail for the right reason, then implement. Commit each logical step separately and PUSH after every commit (`git push -u origin <branch>`), so the work survives a stopped session. Never one big commit. Your pushes are your progress: send no lease or progress messages; the dispatcher checks your session, and an idle session with an open PR and no merge gets a nudge. Author: `git -c user.name=Claude -c user.email=noreply@anthropic.com commit`; every message ends with `Co-Authored-By: <Claude model name> <noreply@anthropic.com>`. Never squash, never rewrite pushed history, never commit to main. At most 2 self-corrections on a failing gate, then BLOCKED. Keep build and test output out of your context, since every later call re-reads it: run them as `<command> > <log> 2>&1; echo exit=$?; tail -50 <log>` (a pipe into `tail` would hide the exit code) and never read a whole log, only `grep` it; for a long run (engine tests, a performance run), a subagent runs it and returns only a table of the failures.
 7. MERGE CONFLICTS (`Other running workers:` names who else is running and where): conflicts do not wake you, so check the PR's mergeable state yourself after every push and every wake. If it is behind or conflicting: `git fetch origin main && git merge origin/main`. Keep both sides' intent in hand-written files. The `Generated files:` (each with its regenerate command) are NEVER resolved by hand: take main's version, regenerate them, re-run the gate, and commit them separately with a body that says they were regenerated.
