@@ -646,12 +646,19 @@ test("the queue shape of DS134: epics only, label searches, one comment per merg
 // session"): a dispatcher started near 120k context with every org repository attached, each loading
 // its AGENTS.md and rules into every call. It attaches only <owner>/tasks; plan writers, helpers and
 // workers clone what they need into their own context.
-test("the dispatcher attaches only <owner>/tasks; plan writers, helpers and workers clone what they need", () => {
+test("the dispatcher starts with only <owner>/tasks and adds product repositories for the API, never a clone", () => {
   const norm = (...p) => fs.readFileSync(path.join(ROOT, "agent-skills", ...p), "utf8").replace(/\s+/g, " ");
   const skill = norm("dispatcher", "SKILL.md");
-  for (const p of ["Attach only `<owner>/tasks`", "`list_commits`", "clones the task's repository into its own scratchpad"]) {
+  for (const p of ["Start with only `<owner>/tasks` attached", "`list_commits`", "clones the task's repository into its own scratchpad"]) {
     assert.ok(skill.includes(p), `SKILL.md says: ${p}`);
   }
+  // A cloud session's GitHub tools refuse a repository that is not attached (2026-10-29): the
+  // dispatcher adds a product repository for the API, and never clones or registers it, so its
+  // rules stay out of every call.
+  for (const p of ["`add_repo` it for the GitHub tools", "never clone it", "never call `register_repo_root`"]) {
+    assert.ok(skill.includes(p), `SKILL.md says: ${p}`);
+  }
+  assert.ok(!skill.includes("never `add_repo` a product repository"), "SKILL.md: a product repository may be added for the API");
   assert.ok(!skill.includes("`git log <base>..origin/main -- <files>`"), "SKILL.md: no git log in a clone the dispatcher no longer has");
   const writer = norm("dispatcher", "references", "plan-writer.md");
   assert.ok(writer.includes("shallow-clone"), "plan-writer.md: the plan writer clones its repository");
