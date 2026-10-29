@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 // The PR body convention (repo-workflow SKILL.md, 4. Commit and pull request).
 //   node pr-body.cjs check [--public] [file]   errors on stderr, exit 1 if any
-//   node pr-body.cjs extract [file]            the sections as JSON on stdout
+//   node pr-body.cjs extract [file]            the list sections as JSON on stdout; the prose
+//                                              sections stay out, so a reader's context stays small
 // The body comes from the file, or stdin: gh pr view <n> -R <owner>/<repo> --json body --jq .body
 "use strict";
 
@@ -74,13 +75,10 @@ function extract(body) {
     closes: l1 ? l1[2].split(", ") : [],
     task: l2 && l2[1] !== "none" ? l2[1] : null,
     plan: l2 && l2[2] ? l2[2] : null,
-    whatChanged: get("What changed and why")?.text ?? null,
-    verified: get("Verified")?.text ?? null,
     notVerified: list(get("NOT VERIFIED"), NOT_VERIFIED).map((m) => ({ gate: m[1], reason: m[2] })),
     kadesSteps: list(get("Kade's steps"), STEP).map((m) => ({ done: m[1] !== " ", text: m[2] })),
     followUps: list(get("Follow-ups")).map((m) => m[1]),
     placeholders: list(get("Placeholders")).map((m) => m[1]),
-    wrongTurns: get("Wrong turns")?.text ?? null,
   };
 }
 

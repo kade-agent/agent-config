@@ -105,6 +105,8 @@ test("every heading is present, in order, with no other level-2 heading", () => 
 });
 
 test("an empty section says None", () => {
+  assert.ok(errors(NONE.replace("## Wrong turns\nNone", "## Wrong turns\n\n🤖 Generated with [Claude Code](x)")).some((e) => /Wrong turns.*None/.test(e)),
+    "the footer is not part of the last section");
   assert.ok(errors(NONE.replace("## Follow-ups\nNone", "## Follow-ups\n")).some((e) => /Follow-ups.*None/.test(e)));
 });
 
@@ -133,7 +135,7 @@ test("extract returns the sections the dispatcher posts on a merge", () => {
   ]);
   assert.deepStrictEqual(got.followUps, ["ADR 12 says two Labels; this uses three", "Rename `GuideScene`"]);
   assert.deepStrictEqual(got.placeholders, ["Label padding 8 dp"]);
-  assert.equal(got.wrongTurns, "None", "the footer is not part of the last section");
+  assert.deepStrictEqual(Object.keys(got).filter((k) => ["whatChanged", "verified", "wrongTurns"].includes(k)), [], "no prose section");
   const none = extract(NONE);
   assert.equal(none.task, null);
   assert.deepStrictEqual([none.notVerified, none.kadesSteps, none.followUps, none.placeholders], [[], [], [], []]);
