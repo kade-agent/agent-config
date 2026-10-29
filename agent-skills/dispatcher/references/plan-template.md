@@ -52,7 +52,7 @@ One commit each, pushed after each:
 
 ## Follow-ups
 
-- <What the PR body's "Follow-ups" section must list: ADR departures, placeholders taken, NOT VERIFIED, open questions. A merge is the DONE (decision 29): no DONE line.>
+- <What the PR body (skill `repo-workflow`, 4.) must list: NOT VERIFIED gates, Kade's steps, Follow-ups (ADR departures, open questions) and Placeholders taken. A merge is the DONE (decision 29): no DONE line.>
 
 ## Questions for Kade
 

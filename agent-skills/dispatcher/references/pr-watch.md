@@ -223,7 +223,7 @@ wake routine. Every other signal is for you:
 
 | Signal | Message to the worker |
 |---|---|
-| `pr_merged` | Nothing to the worker: its subscription brings the merge. The merge finishes the task (decision 29): read the PR body's "Follow-ups" with gh, then SKILL.md, 5. Watching. |
+| `pr_merged` | Nothing to the worker: its subscription brings the merge. The merge finishes the task (decision 29): parse the PR body with `pr-body.cjs extract`, then SKILL.md, 5. Watching. |
 | `pr_closed` | Nothing to the worker: its subscription brings the close, and it answers with a BLOCKED comment or reopens the PR. |
 | `merge_behind` | Merge `origin/main`, regenerate the generated files, re-run the gate, push. |
 | `merge_dirty` | Merge `origin/main` and resolve by worker rule 7: hand-written files keep both sides' intent; generated files take main's version and are regenerated. |

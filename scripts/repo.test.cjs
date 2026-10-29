@@ -617,7 +617,8 @@ test("the dispatcher keeps its context small: Sonnet plan writers, a Haiku helpe
   assert.ok(norm("references", "plan-writer.md").includes('`model: "sonnet"`'), "plan-writer.md: started on Sonnet");
   assert.ok(skill.includes('`model: "haiku"`'), "SKILL.md: a Haiku helper reads sessions and PRs");
   assert.ok(skill.includes("one line per task"), "SKILL.md: the check-in helper returns one line per task");
-  assert.ok(skill.includes("only its Follow-ups and NOT VERIFIED"), "SKILL.md: a merged PR's body is not read whole");
+  // agent-config#165: the parse, not a helper, keeps the body out (pr-body.cjs extract prints only the lists).
+  assert.ok(skill.includes("the body never enters your context whole"), "SKILL.md: a merged PR's body is not read whole");
   assert.ok(skill.includes("never raw `get_session` JSON"), "SKILL.md: no raw get_session in the dispatcher's context");
   assert.ok(skill.includes("waits for the next report that needs Kade"), "SKILL.md 7. Reporting: merge reports are batched");
   assert.ok(skill.includes("its link, never its summary restated"), "SKILL.md 7. Reporting: a plan is linked");
@@ -694,4 +695,28 @@ test("pr-watch.md: the watch holds the org's lease with --session; WATCH-REFUSED
   const design = fs.readFileSync(path.join(ROOT, "docs", "event-broker-design.md"), "utf8").replace(/\s+/g, " ");
   assert.ok(!design.includes("key-value bucket"), "design: decision 33 is a stream, not a key-value bucket (Kade's B)");
   assert.ok(design.includes("expected subject sequence"), "design: two arms cannot both win, by expected subject sequence");
+});
+
+// The PR body convention (agent-config#165): repo-workflow holds the one template, with the
+// headings the pr-body script checks; task-worker points to it; the dispatcher parses a merged PR
+// with the script instead of a model helper.
+test("one PR body template in repo-workflow; the worker points to it, the dispatcher parses it", () => {
+  const read = (...p) => fs.readFileSync(path.join(ROOT, "agent-skills", ...p), "utf8").replace(/[ \t]*\n[ \t]*/g, " ");
+  const { HEADINGS } = require("../agent-skills/repo-workflow/scripts/pr-body.cjs");
+  const workflow = read("repo-workflow", "SKILL.md");
+  for (const h of HEADINGS) assert.ok(workflow.includes(`## ${h}`), `repo-workflow: the template has ## ${h}`);
+  for (const p of ["Closes <owner>/<repo>#<n>", "Task: <ID> · Plan:", "scripts/pr-body.cjs", "- [ ]", "None", "pr-body.yml", "public"]) {
+    assert.ok(workflow.includes(p), `repo-workflow says: ${p}`);
+  }
+  const worker = read("task-worker", "SKILL.md");
+  assert.ok(worker.includes("skill `repo-workflow`, 4."), "task-worker: the PR body is repo-workflow's");
+  for (const gone of ["Decisions taken (placeholders)", "(What changed and why, Verified, NOT VERIFIED, Wrong turns)"]) {
+    assert.ok(!worker.includes(gone), `task-worker no longer says: ${gone}`);
+  }
+  const dispatcher = read("dispatcher", "SKILL.md");
+  assert.ok(dispatcher.includes("pr-body.cjs extract"), "dispatcher: a merged PR is parsed by the script");
+  assert.ok(!dispatcher.includes("helper reads the PR"), "dispatcher: no model helper reads a merged PR");
+  assert.ok(read("dispatcher", "references", "pr-watch.md").includes("pr-body.cjs extract"), "pr-watch.md: pr_merged parses the body");
+  const plan = read("dispatcher", "references", "plan-template.md");
+  for (const h of ["Kade's steps", "Placeholders", "NOT VERIFIED"]) assert.ok(plan.includes(h), `plan-template names ${h}`);
 });
