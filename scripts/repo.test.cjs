@@ -617,7 +617,8 @@ test("the dispatcher keeps its context small: Sonnet plan writers, a Haiku helpe
   assert.ok(norm("references", "plan-writer.md").includes('`model: "sonnet"`'), "plan-writer.md: started on Sonnet");
   assert.ok(skill.includes('`model: "haiku"`'), "SKILL.md: a Haiku helper reads sessions and PRs");
   assert.ok(skill.includes("one line per task"), "SKILL.md: the check-in helper returns one line per task");
-  assert.ok(skill.includes("only its Follow-ups and NOT VERIFIED"), "SKILL.md: a merged PR's body is not read whole");
+  // agent-config#165: the parse, not a helper, keeps the body out (pr-body.cjs extract prints only the lists).
+  assert.ok(skill.includes("the body never enters your context whole"), "SKILL.md: a merged PR's body is not read whole");
   assert.ok(skill.includes("never raw `get_session` JSON"), "SKILL.md: no raw get_session in the dispatcher's context");
   assert.ok(skill.includes("waits for the next report that needs Kade"), "SKILL.md 7. Reporting: merge reports are batched");
   assert.ok(skill.includes("its link, never its summary restated"), "SKILL.md 7. Reporting: a plan is linked");

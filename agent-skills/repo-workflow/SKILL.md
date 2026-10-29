@@ -52,9 +52,42 @@ procedures behind them.
 - **Subject examples.** Good: `A shared log file lost 1780 of 4000 lines under rotation; one file
   per pod lost none`. Bad: `update values.yaml`, `fix bug`.
 - **Body:** also says which earlier belief the change corrects.
-- **PR description:** *What changed and why*, *Verified*, *NOT VERIFIED*, *Wrong turns*
-  (approaches tried and abandoned). The PR is the session record; there are no separate
+- **PR title:** the point of the change, then the task ID when there is one:
+  `The Guide body is three scene Labels (GUIDE-MSGID)`. No `feat:`/`fix:` prefixes.
+- **PR description:** this template, every heading present, in this order, and no other `##`
+  heading. An empty section says `None`. The PR is the session record; there are no separate
   session notes unless the repository still keeps them.
+
+  ```markdown
+  Closes <owner>/<repo>#<n>
+  Task: <ID> · Plan: plans/<lane>/<task>.md@<full 40-character sha>
+
+  ## What changed and why
+  ## Verified
+  - `<gate command>`: <result>
+  ## NOT VERIFIED
+  - NOT VERIFIED: <gate>: <reason>
+  ## Kade's steps
+  - [ ] <merge the draft / a device check / run X on the PC>
+  ## Follow-ups
+  - <one item per line; each could become an issue: ADR departures, open questions>
+  ## Placeholders
+  - <each value taken where none was given, with its value>
+  ## Wrong turns
+  <approaches tried and abandoned>
+  ```
+
+  - Line 1: `Closes` (or `Part of`) with `<owner>/<repo>#<n>`, never a bare `#<n>`; several are
+    comma-separated.
+  - Line 2: `Task: none` outside a dispatcher's queue. In a **public** repository it is only
+    `Task: <ID>`: the task's issue in the private tasks repository links back to the PR.
+  - *Kade's steps* is everything he must do before or after the merge, as a checklist; nothing
+    of his goes under *Follow-ups*.
+  - The Claude Code footer goes after *Wrong turns*.
+- **Check it before opening the PR:** `node <this skill>/scripts/pr-body.cjs check [--public] <file>`
+  (`~/.claude/agent-skills/repo-workflow/` on a machine set up from agent-config). From its
+  rollout on, the reusable `pr-body.yml` in `kade-agent/.github`, called from each org's
+  `.github`, runs the same script on every PR, `*.md`-only ones included, and fails it on an error; `extract` prints the sections as JSON for the dispatcher.
 
 ## 5. Record state where the repository keeps it
 
