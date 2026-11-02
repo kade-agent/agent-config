@@ -23,6 +23,10 @@ procedures behind them.
 - **Decide before you wire.** Wiring, a new repository or a new integration comes after a written
   plan or ADR that Kade has accepted. If the plan says `proposed`, ask him to accept it first
   (or accept with changes); add no dormant caller, disabled workflow or stub for an undecided design.
+- **ADRs are living documents**: any part, Decision points included, is edited in place (a draft
+  PR Kade merges); superseding only retires an ADR whole. Their history is git plus the catalog
+  database, never a generated page. A citation `ADR-X point N` must keep its meaning: the
+  repository's ADR checker flags a citing line when the cited point changed after it was written.
 - **A decision brief** is: 2 to 3 options in a table, the long-term maintenance cost of each,
   your recommendation, open questions. No code, file or dependency until he picks.
 - **Outward actions** (a public repository, an issue or PR made for a test, a transfer, a secret,
@@ -70,7 +74,7 @@ procedures behind them.
   ## Kade's steps
   - [ ] <merge the draft / a device check / run X on the PC>
   ## Follow-ups
-  - <one item per line; each could become an issue: ADR departures, open questions>
+  - <one item per line; each could become an issue: ADR edits the work needs (point and change), open questions>
   ## Placeholders
   - <each value taken where none was given, with its value>
   ## Wrong turns
