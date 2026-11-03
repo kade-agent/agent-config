@@ -727,3 +727,34 @@ test("one PR body template in repo-workflow; the worker points to it, the dispat
   const plan = read("dispatcher", "references", "plan-template.md");
   for (const h of ["Kade's steps", "Placeholders", "NOT VERIFIED"]) assert.ok(plan.includes(h), `plan-template names ${h}`);
 });
+
+// ADRs are living documents (agent-config#169): any part, Decision points included, is edited in
+// place, and superseding only retires an ADR whole. The history is git plus the catalog database,
+// which is the only view of ADRs and decisions: no generated catalog or decision-log page.
+test("the skills treat ADRs as living documents and read decisions through the database", () => {
+  const read = (...p) => fs.readFileSync(path.join(ROOT, "agent-skills", ...p), "utf8").replace(/[ \t]*\n[ \t]*/g, " ");
+  const skills = fs.readdirSync(path.join(ROOT, "agent-skills"));
+  for (const name of skills) {
+    const dir = path.join(ROOT, "agent-skills", name);
+    const files = [path.join("SKILL.md")];
+    if (fs.existsSync(path.join(dir, "references"))) {
+      for (const f of fs.readdirSync(path.join(dir, "references"))) files.push(path.join("references", f));
+    }
+    for (const f of files) {
+      const text = read(name, f);
+      for (const gone of [/ADR departures/i, /supersede[- ]only/i, /never amend/i, /decision[- ]log/i]) {
+        assert.ok(!gone.test(text), `${name}/${f} no longer says ${gone}`);
+      }
+    }
+  }
+  for (const name of ["repo-workflow", "dispatcher", "task-worker"]) {
+    assert.ok(read(name, "SKILL.md").includes("edited in place"), `${name}: ADRs are edited in place`);
+  }
+  const workflow = read("repo-workflow", "SKILL.md");
+  for (const p of ["superseding only retires an ADR whole", "the repository's ADR checker"]) {
+    assert.ok(workflow.includes(p), `repo-workflow says: ${p}`);
+  }
+  assert.ok(read("dispatcher", "SKILL.md").includes("the queue repository's `scripts/README.md`"),
+    "dispatcher: reads decisions and ADRs through the queue repository's database queries");
+  assert.ok(read("task-worker", "SKILL.md").includes("DRAFT PR"), "task-worker: an ADR edit is a draft PR Kade merges");
+});

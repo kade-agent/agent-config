@@ -81,7 +81,7 @@ The prompt is `references/worker-prompt.md` with every slot filled: the sub-issu
 - The tests to write first, each a concrete assertion.
 - The gate commands, from the repository's Gates table.
 - What counts as a placeholder, with a sensible default value.
-- What the PR body (skill `repo-workflow`, 4.) must list under NOT VERIFIED, Kade's steps, Follow-ups (ADR departures, open questions) and Placeholders.
+- What the PR body (skill `repo-workflow`, 4.) must list under NOT VERIFIED, Kade's steps, Follow-ups (ADR edits the work needs, open questions) and Placeholders.
 
 For a worker that takes over a branch, set `source_revision` to that branch. Its plan starts with a review of what the branch already holds.
 
@@ -117,13 +117,13 @@ When a task's PR merges, dispatch whatever it unblocked.
 
 ## 6. Decisions
 
-1. Collect the follow-ups workers report: ADR departures, placeholder numbers, open design questions. On each merge, take the PR's Follow-ups and Placeholders from the parse (When a task is finished) and list them in the sub-issue's one merge comment, so none is lost once its PR merges. Open a follow-up issue only for an item that needs Kade or becomes a task: a sub-issue of the follow-ups epic, labelled `follow-up`, assigned to Kade when it needs his decision.
+1. Collect the follow-ups workers report: ADR edits (ADRs are edited in place, superseding only retires one whole), placeholder numbers, open design questions. On each merge, take the PR's Follow-ups and Placeholders from the parse (When a task is finished) and list them in the sub-issue's one merge comment, so none is lost once its PR merges. Open a follow-up issue only for an item that needs Kade or becomes a task: a sub-issue of the follow-ups epic, labelled `follow-up`, assigned to Kade when it needs his decision.
 2. Design work with no options yet gets an **options doc** task, on `decision_model`. The doc gives A/B/C per question with one recommended option, and its PR body's "## Follow-ups" lists "Questions for Kade".
 3. Put decisions to Kade in this session:
    - use `AskUserQuestion`, at most 4 questions per card, with the recommended option first;
    - when he asks to review together, walk through one topic at a time and show the doc's details first.
 4. Read his answers literally. A free-text answer may change the question; restate your reading and act on it.
-5. Record each decision set as a comment on the queue issue, with his words quoted where he wrote them. If that repository is public, record them on a private repository's issue instead and link it: no private planning in public. Assign each issue that waits on his decision to him. Then dispatch the tasks it unblocks, and tell any running worker whose task it changes.
+5. Record each decision set as a comment on the queue issue, with his words quoted where he wrote them. A workflow adds it to the decision database; never add a line to its files by hand. Read decisions and ADRs through the queries in the queue repository's `scripts/README.md`, never a generated catalog or decision page. If that repository is public, record them on a private repository's issue instead and link it: no private planning in public. Assign each issue that waits on his decision to him. Then dispatch the tasks it unblocks, and tell any running worker whose task it changes.
 
 ## 7. Reporting
 
