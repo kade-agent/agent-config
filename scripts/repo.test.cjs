@@ -758,3 +758,21 @@ test("the skills treat ADRs as living documents and read decisions through the d
     "dispatcher: reads decisions and ADRs through the queue repository's database queries");
   assert.ok(read("task-worker", "SKILL.md").includes("DRAFT PR"), "task-worker: an ADR edit is a draft PR Kade merges");
 });
+
+// The dispatcher's bookkeeping is one command each (ported from stella-rain/tasks#587): the skill
+// names agent-skills/dispatcher/scripts/dispatch.cjs at each step it covers, and keeps the manual
+// steps as the fallback for a session whose gh cannot write.
+test("the dispatcher's labels, dispatched, DONE and decision comments go through dispatch.cjs", () => {
+  const dir = path.join(ROOT, "agent-skills", "dispatcher");
+  const read = (...p) => fs.readFileSync(path.join(dir, ...p), "utf8").replace(/[ \t]*\n[ \t]*/g, " ");
+  assert.ok(fs.existsSync(path.join(dir, "scripts", "dispatch.cjs")), "dispatcher/scripts/dispatch.cjs exists");
+  const skill = read("SKILL.md");
+  for (const p of ["~/.claude/agent-skills/dispatcher/scripts/dispatch.cjs", "dispatch.cjs dispatched <issue> <task id> <session id>",
+    "dispatch.cjs label <issue> <status>", "dispatch.cjs done <issue> <owner>/<repo>#<PR>", "--route",
+    "dispatch.cjs decision <DS-NNNN> <file>", "--dry-run", "When `gh` cannot write"]) {
+    assert.ok(skill.includes(p), `SKILL.md says: ${p}`);
+  }
+  const watch = read("references", "pr-watch.md");
+  assert.ok(watch.includes("dispatch.cjs") && watch.includes("When `gh` cannot write"),
+    "pr-watch.md: the script writes the ignore file; the echo lines are the fallback");
+});
