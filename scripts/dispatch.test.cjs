@@ -345,6 +345,16 @@ test("done: a second DONE for the same PR is exit 3 with the comment's URL, befo
   assert.ok(get.args.includes("--paginate") && get.args.includes("--slurp"));
 });
 
+test("done: a merged PR without merge_commit_sha is exit 2 before any write (#587: it printed `()`)", () => {
+  for (const sha of [null, ""]) {
+    const w = world();
+    const gh = doneGh({ sha });
+    assert.strictEqual(done(w, gh), 2, String(sha));
+    assert.match(w.err, /merge_commit_sha/);
+    assert.deepStrictEqual(gh.writes(), []);
+  }
+});
+
 test("done: a PR ref that is not <owner>/<repo>#<n> is exit 2", () => {
   const w = world();
   const gh = doneGh();
