@@ -1,12 +1,12 @@
 #!/usr/bin/env node
 // The dispatcher's bookkeeping, one command each (dispatcher SKILL.md; ported from stella-rain/tasks#587).
 //   node dispatch.cjs [--owner O] [--repo R] [--queue N] [--ignore-file PATH] [--dry-run] <command>
-//     dispatched <issue> <task> <session>   the `dispatched` comment on the queue; approved|planned -> running
+//     dispatched <issue> <task> <session>   the `dispatched` comment on the sub-issue; approved|planned -> running
 //     label <issue> <status>                one status: label, every other one removed
 //     done <issue> <owner/repo#PR> [--route <issue>]   the DONE comment from the parsed PR body, labels off, closed
 //     decision <DS-NNNN> <file>             the file, headed `**DS-NNNN · YYYY-MM-DD · Kade:**`, on the queue
 // Owner: --owner or DISPATCH_OWNER (required). Repo: --repo, DISPATCH_REPO, else `tasks`. Queue: --queue or
-// DISPATCH_QUEUE, required by dispatched and decision. Every GitHub call is `gh api repos/<owner>/<repo>/...`.
+// DISPATCH_QUEUE, required by decision. Every GitHub call is `gh api repos/<owner>/<repo>/...`.
 // Exit: 0 done, 1 a gh call failed (stdout lists what completed), 2 usage or refusal with nothing written,
 // 3 done refused: the issue already has a DONE comment for that PR (stderr has its URL).
 "use strict";
@@ -126,13 +126,12 @@ function setStatus(c, n, next, have) {
 function cmdDispatched(c, [issue, task, session]) {
   const n = issueNumber(issue, "issue");
   if (!task || !session) throw usage("dispatched <issue> <task> <session>");
-  const queue = c.queue;
   const have = statuses(c.read(c.path(`issues/${n}`)));
   let swap;
   if (have.length === 1 && have[0] === "status:running") swap = false;
   else if (have.length && have.every((h) => h === "status:approved" || h === "status:planned")) swap = true;
   else throw usage(`#${n} has ${have.join(", ") || "no status label"}, not status:approved or status:planned`);
-  c.comment(c.path(`issues/${queue}`), `dispatched ${task}: ${session}`);
+  c.comment(c.path(`issues/${n}`), `dispatched ${task}: ${session}`); // where SKILL.md, 4. looks for the worker
   if (swap) setStatus(c, n, "status:running", have);
 }
 
