@@ -358,7 +358,9 @@ test("decision: posts the file on the queue and prints the URL; the footer is no
 
 test("decision: a wrong or missing header is exit 2 with nothing written", () => {
   for (const text of ["**DS-0549 · 2026-11-11 · Kade:** x", "**DS146** (Kade, 2026-11-11) x",
-    "DS-0548 · 2026-11-11 · Kade: x", "**DS-0548 · 2026-13-1 · Kade:** x", ""]) {
+    "DS-0548 · 2026-11-11 · Kade: x", "**DS-0548 · 2026-13-1 · Kade:** x", "",
+    // decisions.yml ingests only `· Kade:` headers: any other author would be posted and never logged (#587).
+    "**DS-0548 · 2026-11-11 · Claude:** x", "**DS-0548 · 2026-11-11 · Kade (by Claude):** x"]) {
     const w = world();
     const gh = fakeGh();
     assert.strictEqual(w.run([...ORG, "decision", "DS-0548", w.file(text)], gh), 2, text);
