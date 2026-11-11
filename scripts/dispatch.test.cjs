@@ -124,6 +124,16 @@ test("no owner, or no queue for a command that posts on it, is exit 2 with nothi
   assert.strictEqual(w.run(["--owner", "stella-rain", "label", "586", "held"], gh), 0, "label needs no queue");
 });
 
+test("a queue that is not an issue number is exit 2 with nothing called (#587: DISPATCH_QUEUE=abc)", () => {
+  for (const [argv, env] of [[["--queue", "abc"], {}], [[], { DISPATCH_QUEUE: "abc" }], [["--queue", "0x9"], {}]]) {
+    const w = world();
+    const gh = fakeGh({ [Q + "/586"]: issue(["status:approved"]) });
+    assert.strictEqual(w.run(["--owner", "stella-rain", ...argv, "dispatched", "586", "T-1", "s"], gh, { env }), 2, argv.join(" "));
+    assert.match(w.err, /queue/);
+    assert.deepStrictEqual(gh.calls, []);
+  }
+});
+
 test("the ignore file defaults to ~/.claude/dispatcher/ignore-<owner>; WATCH_IGNOREFILE overrides it", () => {
   const w = world();
   w.run([...ORG, "dispatched", "586", "T-1", "s"], fakeGh({ [Q + "/586"]: issue(["status:approved"]) }), { ignore: false });
