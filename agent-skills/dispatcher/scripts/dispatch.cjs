@@ -172,6 +172,7 @@ function cmdDone(c, [issue, prRef], flags) {
   const ref = `${owner}/${repo}#${num}`;
   const pr = c.read(`repos/${owner}/${repo}/pulls/${num}`);
   if (!pr.merged) throw usage(`${ref} is not merged`);
+  if (!pr.merge_commit_sha) throw usage(`${ref} is merged but GitHub gave no merge_commit_sha; re-run in a minute`);
   const iss = c.read(c.path(`issues/${n}`));
   const ex = extract(pr.body || "");
   let task = ex.task;
@@ -192,7 +193,7 @@ function cmdDone(c, [issue, prRef], flags) {
         [...routed.keys()].map((f) => "- " + f).join("\n"));
     }
   }
-  c.comment(c.path(`issues/${n}`), doneText(task, ref, pr.merge_commit_sha || "", pr.title || "", ex, routed));
+  c.comment(c.path(`issues/${n}`), doneText(task, ref, pr.merge_commit_sha, pr.title || "", ex, routed));
   dropLabels(c, n, statuses(iss));
   if (iss.state !== "closed") {
     c.write("PATCH", c.path(`issues/${n}`), { state: "closed", state_reason: "completed" });
