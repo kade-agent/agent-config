@@ -99,12 +99,13 @@ const posts = (gh) => gh.writes().filter((x) => x[0] === "POST");
 
 test("owner and queue come from flags, else env; a flag wins", () => {
   const w = world();
-  let gh = fakeGh({ "repos/o/r/issues/586": issue(["status:approved"]) });
-  assert.strictEqual(w.run(["--owner", "o", "--repo", "r", "--queue", "9", "dispatched", "586", "T-1", "s"], gh), 0, w.err);
-  assert.strictEqual(gh.calls[1].path, "repos/o/r/issues/9/comments");
-  gh = fakeGh({ "repos/o/r/issues/586": issue(["status:approved"]) });
-  w.run(["dispatched", "586", "T-1", "s"], gh, { env: { DISPATCH_OWNER: "o", DISPATCH_REPO: "r", DISPATCH_QUEUE: "9" } });
-  assert.strictEqual(gh.calls[1].path, "repos/o/r/issues/9/comments");
+  const ds = () => w.file("**DS-0548 · 2026-11-11 · Kade:** x");
+  let gh = fakeGh();
+  assert.strictEqual(w.run(["--owner", "o", "--repo", "r", "--queue", "9", "decision", "DS-0548", ds()], gh), 0, w.err);
+  assert.strictEqual(gh.calls[0].path, "repos/o/r/issues/9/comments");
+  gh = fakeGh();
+  w.run(["decision", "DS-0548", ds()], gh, { env: { DISPATCH_OWNER: "o", DISPATCH_REPO: "r", DISPATCH_QUEUE: "9" } });
+  assert.strictEqual(gh.calls[0].path, "repos/o/r/issues/9/comments");
   gh = fakeGh({ "repos/o2/tasks/issues/586": issue(["status:approved"]) });
   w.run(["--owner", "o2", "--queue", "9", "dispatched", "586", "T-1", "s"], gh, { env: { DISPATCH_OWNER: "o" } });
   assert.strictEqual(gh.calls[0].path, "repos/o2/tasks/issues/586");
@@ -117,18 +118,20 @@ test("no owner, or no queue for a command that posts on it, is exit 2 with nothi
   assert.match(w.err, /owner/);
   assert.deepStrictEqual(gh.calls, []);
   gh = fakeGh();
-  assert.strictEqual(w.run(["--owner", "stella-rain", "dispatched", "586", "T-1", "s"], gh), 2);
+  assert.strictEqual(w.run(["--owner", "stella-rain", "decision", "DS-0548", w.file("**DS-0548 · 2026-11-11 · Kade:** x")], gh), 2);
   assert.match(w.err, /queue/);
   assert.deepStrictEqual(gh.calls, []);
   gh = fakeGh({ [Q + "/586"]: issue(["status:approved"]) });
   assert.strictEqual(w.run(["--owner", "stella-rain", "label", "586", "held"], gh), 0, "label needs no queue");
+  gh = fakeGh({ [Q + "/586"]: issue(["status:approved"]) });
+  assert.strictEqual(w.run(["--owner", "stella-rain", "dispatched", "586", "T-1", "s"], gh), 0, "dispatched needs no queue");
 });
 
 test("a queue that is not an issue number is exit 2 with nothing called (#587: DISPATCH_QUEUE=abc)", () => {
   for (const [argv, env] of [[["--queue", "abc"], {}], [[], { DISPATCH_QUEUE: "abc" }], [["--queue", "0x9"], {}]]) {
     const w = world();
-    const gh = fakeGh({ [Q + "/586"]: issue(["status:approved"]) });
-    assert.strictEqual(w.run(["--owner", "stella-rain", ...argv, "dispatched", "586", "T-1", "s"], gh, { env }), 2, argv.join(" "));
+    const gh = fakeGh();
+    assert.strictEqual(w.run(["--owner", "stella-rain", ...argv, "decision", "DS-0548", w.file("**DS-0548 · 2026-11-11 · Kade:** x")], gh, { env }), 2, argv.join(" "));
     assert.match(w.err, /queue/);
     assert.deepStrictEqual(gh.calls, []);
   }
@@ -155,12 +158,14 @@ test("usage errors are exit 2", () => {
 // --- dispatched ---
 
 for (const old of ["status:approved", "status:planned"]) {
-  test(`dispatched: comments on the queue and swaps ${old} for status:running`, () => {
+  // The comment goes on the task's sub-issue: the skill finds a task's worker there (SKILL.md, 4.), and the
+  // live ones are there (stella-rain/tasks#558, #577); #587 posted it on the queue issue.
+  test(`dispatched: comments on the sub-issue and swaps ${old} for status:running`, () => {
     const w = world();
     const gh = fakeGh({ [Q + "/586"]: issue([old, "bug"]) });
     assert.strictEqual(w.run([...ORG, "dispatched", "586", "T-1", "session_x"], gh), 0, w.err);
     assert.deepStrictEqual(gh.writes(), [
-      ["POST", Q + "/145/comments", { body: "dispatched T-1: session_x" + FOOTER }],
+      ["POST", Q + "/586/comments", { body: "dispatched T-1: session_x" + FOOTER }],
       ["POST", Q + "/586/labels", { labels: ["status:running"] }],
       ["DELETE", Q + "/586/labels/" + old.replace(":", "%3A"), null],
     ]);
@@ -182,7 +187,7 @@ test("dispatched: an issue already running (a replacement worker) gets the comme
   const w = world();
   const gh = fakeGh({ [Q + "/586"]: issue(["status:running"]) });
   assert.strictEqual(w.run([...ORG, "dispatched", "586", "T-1", "s2"], gh), 0);
-  assert.deepStrictEqual(gh.writes().map((x) => x.slice(0, 2)), [["POST", Q + "/145/comments"]]);
+  assert.deepStrictEqual(gh.writes().map((x) => x.slice(0, 2)), [["POST", Q + "/586/comments"]]);
   assert.deepStrictEqual(w.ignoreLines(), []);
 });
 
