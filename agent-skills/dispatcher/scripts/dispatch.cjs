@@ -64,7 +64,7 @@ class Ctx {
   get slug() { return `${this.owner}/${this.repo}`; }
   get queue() {
     if (!this.queueRaw) throw usage("no queue: pass --queue or set DISPATCH_QUEUE");
-    return Number(this.queueRaw);
+    return issueNumber(this.queueRaw, "the queue");
   }
   path(tail) { return `repos/${this.slug}/${tail}`; }
 
