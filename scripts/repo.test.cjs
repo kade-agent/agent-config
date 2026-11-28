@@ -413,7 +413,7 @@ test("the dispatcher skill says how it watches PR events and tells the worker at
 test("the dispatcher runs lanes of sub-issues in <owner>/tasks with plans as files", () => {
   const dir = path.join(ROOT, "agent-skills", "dispatcher");
   const skill = fs.readFileSync(path.join(dir, "SKILL.md"), "utf8").replace(/\s+/g, " ");
-  for (const p of ["`<owner>/tasks`", "sub-issue", "global session cap", "never falls back to a public repository",
+  for (const p of ["`<owner>/tasks`", "sub-issue", "There is no session cap", "never falls back to a public repository",
     "`plans/<lane>/<task>.md`", "pinned sha", "`Blocked by: #<n>`", "`<!-- task:<id> -->`", "plan shas",
     "`status:blocked`", "A plan edited after approval goes back to Kade",
     "`Closes <owner>/tasks#<n>`", "rebuilt from the issues", "lease", "delivery GUID", "labelled `follow-up`",
@@ -421,6 +421,8 @@ test("the dispatcher runs lanes of sub-issues in <owner>/tasks with plans as fil
     assert.ok(skill.includes(p), `SKILL.md says: ${p}`);
   }
   assert.ok(!skill.includes("edited after each event"), "the status comment is gone: state is rebuilt from the issues");
+  // DS-0857 (Kade, 2026-11-27, stella-rain/tasks#145): about 4 is a starting value, never a cap.
+  assert.ok(!skill.includes("at most about 4 sessions"), "no session cap: 4 is only a starting value");
   // DS134 (Kade, 2026-10-27, stella-rain/tasks#137) replaces decision 30's single label: every open
   // task carries exactly one status label, which the dispatcher swaps at each change.
   for (const label of ["`status:pending`", "`status:planned`", "`status:approved`", "`status:held`", "`status:running`", "`status:blocked`"]) {
